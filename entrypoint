@@ -1,0 +1,261 @@
+#!/bin/bash
+set -e
+
+# Set logging level (default to INFO if not set)
+LOGGING="${LOGGING:-INFO}"
+
+# Create mount directory
+mkdir -p /mnt/backup
+
+# Export AWS credentials as environment variables (some s3fs versions need both)
+export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}"
+export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}"
+export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION}"
+
+# Check if required environment variables are set
+if [ -z "$S3_BUCKET_NAME" ]; then
+    echo "Error: S3_BUCKET_NAME environment variable is required"
+    exit 1
+fi
+
+if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+    echo "Error: AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables are required"
+    exit 1
+fi
+
+# Create AWS credentials file for s3fs
+echo "${S3_BUCKET_NAME}:${AWS_ACCESS_KEY_ID}:${AWS_SECRET_ACCESS_KEY}" > /etc/passwd-s3fs
+chmod 600 /etc/passwd-s3fs
+
+# Create cache directory
+mkdir -p /tmp/s3fs_cache
+
+# Configure logging based on LOGGING environment variable
+if [ "$LOGGING" = "DEBUG" ]; then
+    # Full debug output
+    echo "========================================="
+    echo "Starting S3 Mount with Full Debugging"
+    echo "========================================="
+    echo "S3_BUCKET_NAME: ${S3_BUCKET_NAME}"
+    echo "AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:0:10}..."
+    echo "AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION}"
+    echo "S3 URL: https://s3-${AWS_DEFAULT_REGION}.amazonaws.com"
+    echo ""
+    echo "Checking /etc/passwd-s3fs contents:"
+    echo "$(cat /etc/passwd-s3fs | sed 's/:.*:/:***:/' | sed 's/:.*$/:***/') (credentials masked)"
+    echo ""
+    echo "Testing direct S3 connectivity with curl:"
+    curl -I "https://s3-${AWS_DEFAULT_REGION}.amazonaws.com" 2>&1 | head -5
+    echo ""
+    echo "Mounting with full debug options..."
+    echo "========================================="
+    
+    # Mount with debug options
+    s3fs "${S3_BUCKET_NAME}" /mnt/backup \
+        -o passwd_file=/etc/passwd-s3fs \
+        -o url="https://s3-${AWS_DEFAULT_REGION}.amazonaws.com" \
+        -o endpoint="${AWS_DEFAULT_REGION}" \
+        -o use_path_request_style \
+        -o allow_other \
+        -o uid=0 \
+        -o gid=0 \
+        -o mp_umask=002 \
+        -o umask=002 \
+        -o kernel_cache \
+        -o max_stat_cache_size=100000 \
+        -o dbglevel=info \
+        -o curldbg \
+        -f 2>&1 | tee /tmp/s3fs_debug.log &
+else
+    # Minimal output for production mode
+    echo "Mounting S3 bucket '${S3_BUCKET_NAME}'..."
+    
+    # Mount without debug options but still in foreground for process monitoring
+    s3fs "${S3_BUCKET_NAME}" /mnt/backup \
+        -o passwd_file=/etc/passwd-s3fs \
+        -o url="https://s3-${AWS_DEFAULT_REGION}.amazonaws.com" \
+        -o endpoint="${AWS_DEFAULT_REGION}" \
+        -o use_path_request_style \
+        -o allow_other \
+        -o uid=0 \
+        -o gid=0 \
+        -o mp_umask=002 \
+        -o umask=002 \
+        -o kernel_cache \
+        -o max_stat_cache_size=100000 \
+        -f >/dev/null 2>&1 &
+fi
+
+S3FS_PID=$!
+
+# Give s3fs time to initialize
+if [ "$LOGGING" = "DEBUG" ]; then
+    echo "Waiting for s3fs to initialize..."
+fi
+sleep 3
+
+# Check if s3fs is still running
+if kill -0 $S3FS_PID 2>/dev/null; then
+    if [ "$LOGGING" = "DEBUG" ]; then
+        echo "✓ s3fs process is running (PID: $S3FS_PID)"
+    fi
+    # Send to background
+    kill -CONT $S3FS_PID 2>/dev/null
+else
+    echo "✗ s3fs process died during initialization"
+    if [ "$LOGGING" = "DEBUG" ] && [ -f /tmp/s3fs_debug.log ]; then
+        echo "Last 20 lines of debug log:"
+        tail -20 /tmp/s3fs_debug.log
+    fi
+    exit 1
+fi
+
+# Verify mount based on logging level
+if [ "$LOGGING" = "DEBUG" ]; then
+    echo "========================================="
+    echo "Mount Verification"
+    echo "========================================="
+    
+    # Verify mount with detailed checking
+    echo "Checking mount status..."
+    if mount | grep -q "/mnt/backup"; then
+        echo "✓ Mount point found in /etc/mtab"
+        
+        # Test mount functionality with detailed output
+        echo "Testing mount functionality..."
+        echo "Running: ls -la /mnt/backup/"
+        if ls -la /mnt/backup/ 2>&1; then
+            echo "✓ ls command succeeded"
+            echo "Directory contents:"
+            ls -la /mnt/backup/
+            
+            # Additional tests
+            echo ""
+            echo "Running: stat /mnt/backup/"
+            stat /mnt/backup/ 2>&1
+            
+            echo ""
+            echo "Running: df -h /mnt/backup/"
+            df -h /mnt/backup/ 2>&1
+            
+            echo ""
+            echo "Checking s3fs process details:"
+            ps aux | grep s3fs | grep -v grep
+            
+        else
+            echo "✗ Cannot list directory contents"
+            echo "Error details:"
+            ls -la /mnt/backup/ 2>&1
+            
+            echo ""
+            echo "Checking s3fs debug log:"
+            tail -50 /tmp/s3fs_debug.log
+            
+            echo ""
+            echo "Testing direct S3 access with authentication:"
+            curl -H "Host: ${S3_BUCKET_NAME}.s3-${AWS_DEFAULT_REGION}.amazonaws.com" \
+                 -I "https://s3-${AWS_DEFAULT_REGION}.amazonaws.com/" 2>&1 | head -10
+        fi
+    else
+        echo "✗ Mount point NOT found in /etc/mtab"
+        echo "Checking for s3fs processes..."
+        pgrep -f s3fs || echo "✗ No s3fs processes running"
+        exit 1
+    fi
+else
+    # Minimal verification for production mode
+    if mount | grep -q "/mnt/backup"; then
+        # Quick test that mount is working
+        if ls /mnt/backup/ >/dev/null 2>&1; then
+            echo "✓ S3 bucket mounted successfully"
+        else
+            echo "✗ S3 bucket mount failed - cannot access /mnt/backup"
+            exit 1
+        fi
+    else
+        echo "✗ S3 bucket mount failed"
+        exit 1
+    fi
+fi
+
+echo "S3 bucket setup completed"
+
+# Enhanced cleanup function with timeout and fallbacks
+cleanup() {
+    echo "Starting S3 bucket cleanup..."
+
+    # Step 1: Check if mount exists
+    if ! mount | grep -q "/mnt/backup"; then
+        echo "S3 bucket not mounted, skipping unmount"
+    else
+        # Step 2: Normal unmount with timeout
+        echo "Attempting normal unmount..."
+        if timeout 10s umount /mnt/backup 2>/dev/null; then
+            echo "Normal unmount successful"
+        else
+            echo "Normal unmount timed out or failed, trying lazy unmount..."
+
+            # Step 3: Lazy unmount as fallback
+            if umount -l /mnt/backup 2>/dev/null; then
+                echo "Lazy unmount initiated"
+
+                # Give it a moment to complete
+                sleep 2
+
+                # Step 4: Verify if unmount completed
+                if mount | grep -q "/mnt/backup"; then
+                    echo "Lazy unmount didn't complete, trying force unmount..."
+                    umount -f /mnt/backup 2>/dev/null || echo "Force unmount failed"
+                fi
+            else
+                echo "Lazy unmount failed, trying force unmount..."
+                umount -f /mnt/backup 2>/dev/null || echo "Force unmount failed"
+            fi
+        fi
+
+        # Step 5: Final verification
+        if mount | grep -q "/mnt/backup"; then
+            echo "WARNING: Could not unmount /mnt/backup - mount may persist"
+        else
+            echo "S3 bucket successfully unmounted"
+        fi
+    fi
+
+    # Step 6: Clean up temporary files and cache
+    echo "Cleaning up temporary files..."
+    rm -f /etc/passwd-s3fs
+    rm -rf /tmp/s3fs_cache
+
+    echo "Cleanup completed"
+    exit 0
+}
+
+# Check if we're in an interactive session
+if [ -t 0 ] && [ -t 1 ]; then
+    echo "Interactive session detected"
+    IS_INTERACTIVE=true
+else
+    echo "Non-interactive session detected"
+    IS_INTERACTIVE=false
+fi
+
+# Set up signal handlers for graceful shutdown (only for non-interactive)
+if [ "$IS_INTERACTIVE" = false ]; then
+    trap cleanup SIGINT SIGTERM
+fi
+
+# Execute the main command
+if [ "$IS_INTERACTIVE" = true ]; then
+    echo "Starting interactive shell - S3 bucket will remain mounted"
+    exec "$@"
+else
+    echo "Running command in non-interactive mode"
+    exec "$@" &
+    MAIN_PID=$!
+
+    # Wait for main process
+    wait $MAIN_PID
+
+    # Cleanup on exit
+    cleanup
+fi

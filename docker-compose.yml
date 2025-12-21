@@ -1,0 +1,32 @@
+services:
+  borgbackup:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    image: borgbackup
+    stdin_open: true
+    tty: true
+    privileged: true
+    environment:
+      # S3 Configuration
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-east-1}
+      # Logging Configuration
+      - LOGGING=${LOGGING:-INFO}
+      # Borg Configuration
+      - BORG_REPO=${BORG_REPO}
+      - BORG_PASSPHRASE=${BORG_PASSPHRASE}
+    volumes:
+      - /:/mnt/target
+      # Allow s3fs to work with FUSE
+      - /dev/fuse:/dev/fuse
+      - /etc/passwd:/etc/passwd:ro
+      - /etc/group:/etc/group:ro
+    devices:
+      - /dev/fuse:/dev/fuse
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - apparmor:unconfined
