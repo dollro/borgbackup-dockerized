@@ -13,7 +13,15 @@
 | Docker | Latest | Container runtime |
 | Docker Compose | Latest | Container orchestration |
 
-### AWS Services
+### Storage Backend Technologies
+
+| Backend | Technology | Purpose |
+|---------|------------|---------|
+| S3 | s3fs-fuse | FUSE mount for AWS S3 buckets |
+| USB | blkid + mount | UUID-based device detection and mounting |
+| Local | bind mount | Direct filesystem access via Docker volumes |
+
+### AWS Services (S3 Backend)
 
 | Service | Purpose |
 |---------|---------|
@@ -24,16 +32,23 @@
 
 ```
 borgbackup/
-├── .env.example          # Environment variable template
+├── .env.example          # Environment variable template (all backends)
 ├── .env                  # Actual configuration (gitignored)
 ├── .gitignore            # Git ignore rules
 ├── Dockerfile            # Container build instructions
-├── docker-compose.yml    # Service configuration
-├── entrypoint            # S3 mount and initialization script
+├── docker-compose.yml    # Service configuration with profiles
+├── entrypoint            # Multi-backend mount and initialization
 ├── start                 # (Empty placeholder script)
-├── backup.sh             # Main backup automation script
+├── backup.sh             # Backend-aware backup automation
 ├── run-backup.sh         # Host wrapper for backup execution
-└── README.md             # Documentation
+├── README.md             # Documentation for all backends
+└── memory-bank/          # Project documentation
+    ├── activeContext.md
+    ├── productContext.md
+    ├── progress.md
+    ├── projectbrief.md
+    ├── systemPatterns.md
+    └── techContext.md
 ```
 
 ## Dependencies
@@ -41,7 +56,7 @@ borgbackup/
 ### Dockerfile Build Dependencies
 
 ```dockerfile
-# For s3fs
+# For s3fs (S3 backend)
 s3fs=1.95-1
 glib-networking
 curl
@@ -61,6 +76,14 @@ build-essential
 pkg-config
 libfuse-dev
 fuse
+
+# For USB backend (filesystem tools)
+util-linux          # blkid for UUID detection
+ntfs-3g             # NTFS filesystem support
+e2fsprogs           # ext2/ext3/ext4 tools
+xfsprogs            # XFS filesystem support
+btrfs-progs         # Btrfs filesystem support
+dosfstools          # FAT/FAT32 filesystem support
 ```
 
 ### Python Dependencies
@@ -72,69 +95,100 @@ llfuse
 
 ## Environment Variables
 
-### Required Variables
+### Backend Selection
+
+| Variable | Description | Values | Default |
+|----------|-------------|--------|---------|
+| `BACKUP_STORAGE_TYPE` | Storage backend to use | `s3`, `usb`, `local` | `s3` |
+
+### Common Variables (All Backends)
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `S3_BUCKET_NAME` | S3 bucket name | `myserver-backup` |
-| `AWS_ACCESS_KEY_ID` | AWS IAM access key | `AKIA...` |
-| `AWS_SECRET_ACCESS_KEY` | AWS IAM secret key | `wJalr...` |
-| `BORG_PASSPHRASE` | Encryption passphrase | `secure-passphrase` |
-
-### Optional Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `AWS_DEFAULT_REGION` | AWS region | `us-east-1` |
-| `LOGGING` | Log verbosity | `INFO` |
 | `BORG_REPO` | Borg repository path | `/mnt/backup/borgbackup` |
+| `BORG_PASSPHRASE` | Encryption passphrase | `secure-passphrase` |
+| `LOGGING` | Log verbosity | `INFO` or `DEBUG` |
+
+### S3 Backend Variables
+
+| Variable | Description | Required | Default |
+|----------|-------------|----------|---------|
+| `S3_BUCKET_NAME` | S3 bucket name | Yes | - |
+| `AWS_ACCESS_KEY_ID` | AWS IAM access key | Yes | - |
+| `AWS_SECRET_ACCESS_KEY` | AWS IAM secret key | Yes | - |
+| `AWS_DEFAULT_REGION` | AWS region | No | `us-east-1` |
+
+### USB Backend Variables
+
+| Variable | Description | Required | Example |
+|----------|-------------|----------|---------|
+| `USB_DEVICE_UUID` | UUID of USB device | Yes | `1234-5678-90AB-CDEF` |
+
+### Local Backend Variables
+
+| Variable | Description | Required | Example |
+|----------|-------------|----------|---------|
+| `LOCAL_BACKUP_PATH` | Path on host filesystem | Yes | `/mnt/nas/backups` |
 
 ## Container Configuration
 
-### Docker Compose Settings
+### Docker Compose Services
 
 ```yaml
-privileged: true          # Required for FUSE mounts
-stdin_open: true          # Enable interactive mode
-tty: true                 # Allocate pseudo-TTY
-cap_add:
-  - SYS_ADMIN             # Required for mount operations
-security_opt:
-  - apparmor:unconfined   # Disable AppArmor restrictions
+services:
+  # Main service for S3 and USB backends
+  borgbackup:
+    privileged: true
+    environment:
+      - BACKUP_STORAGE_TYPE=${BACKUP_STORAGE_TYPE:-s3}
+      # ... backend-specific vars
+    volumes:
+      - /:/mnt/target              # Host filesystem
+      - /dev:/dev                  # Device access (USB)
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - apparmor:unconfined
+
+  # Local backend service (uses profile)
+  borgbackup-local:
+    profiles:
+      - local
+    volumes:
+      - /:/mnt/target
+      - ${LOCAL_BACKUP_PATH}:/mnt/backup  # Bind mount
 ```
 
 ### Volume Mounts
 
-| Host Path | Container Path | Purpose |
-|-----------|----------------|---------|
-| `/` | `/mnt/target` | Host filesystem access |
-| `/dev/fuse` | `/dev/fuse` | FUSE device access |
-| `/etc/passwd` | `/etc/passwd:ro` | User mapping |
-| `/etc/group` | `/etc/group:ro` | Group mapping |
+| Host Path | Container Path | Purpose | Backends |
+|-----------|----------------|---------|----------|
+| `/` | `/mnt/target` | Host filesystem access | All |
+| `/dev` | `/dev` | Block device access | S3, USB |
+| `/etc/passwd` | `/etc/passwd:ro` | User mapping | All |
+| `/etc/group` | `/etc/group:ro` | Group mapping | All |
+| `${LOCAL_BACKUP_PATH}` | `/mnt/backup` | Backup destination | Local |
 
-## AWS IAM Policy
+## Backend-Specific Technical Details
 
-Required IAM policy for S3 bucket access:
+### S3 Backend (s3fs)
 
+#### IAM Policy Required
 ```json
 {
     "Version": "2012-10-17",
     "Statement": [
         {
-            "Sid": "ListBucketPermission",
             "Effect": "Allow",
             "Action": "s3:ListBucket",
             "Resource": "arn:aws:s3:::<BUCKET-NAME>"
         },
         {
-            "Sid": "ObjectOperationsPermission",
             "Effect": "Allow",
             "Action": [
                 "s3:PutObject",
                 "s3:GetObject",
-                "s3:DeleteObject",
-                "s3:DeleteObjectVersion",
-                "s3:GetObjectVersion"
+                "s3:DeleteObject"
             ],
             "Resource": "arn:aws:s3:::<BUCKET-NAME>/*"
         }
@@ -142,20 +196,50 @@ Required IAM policy for S3 bucket access:
 }
 ```
 
-## s3fs Mount Options
-
+#### s3fs Mount Options
 ```bash
 s3fs "${S3_BUCKET_NAME}" /mnt/backup \
-    -o passwd_file=/etc/passwd-s3fs \    # Credentials file
+    -o passwd_file=/etc/passwd-s3fs \
     -o url="https://s3-${AWS_DEFAULT_REGION}.amazonaws.com" \
     -o endpoint="${AWS_DEFAULT_REGION}" \
-    -o use_path_request_style \           # Path-style URLs
-    -o allow_other \                      # Allow other users
-    -o uid=0 -o gid=0 \                   # Root ownership
-    -o mp_umask=002 -o umask=002 \        # Permissions
-    -o kernel_cache \                     # Enable caching
-    -o max_stat_cache_size=100000         # Cache 100k stats
+    -o use_path_request_style \
+    -o allow_other \
+    -o uid=0 -o gid=0 \
+    -o mp_umask=002 -o umask=002 \
+    -o kernel_cache \
+    -o max_stat_cache_size=100000
 ```
+
+### USB Backend
+
+#### UUID Detection
+```bash
+# Find device by UUID
+USB_DEVICE=$(blkid -U "$USB_DEVICE_UUID")
+
+# Get filesystem type
+USB_FSTYPE=$(blkid -s TYPE -o value "$USB_DEVICE")
+```
+
+#### Supported Filesystems
+| Filesystem | Mount Options | Notes |
+|------------|---------------|-------|
+| ext4/ext3/ext2 | `rw` | Recommended |
+| xfs | `rw` | Good performance |
+| btrfs | `rw` | Supports snapshots |
+| ntfs | `rw,uid=0,gid=0` | Via ntfs-3g |
+| vfat/FAT32 | `rw,uid=0,gid=0,umask=002` | Limited (no symlinks) |
+
+### Local Backend
+
+#### Docker Compose Profile
+```bash
+# Run with local profile
+sudo docker compose --profile local run --rm borgbackup-local <command>
+```
+
+#### Bind Mount
+The `LOCAL_BACKUP_PATH` host directory is directly mounted to `/mnt/backup` in the container.
 
 ## Borg Backup Configuration
 
@@ -196,15 +280,24 @@ sudo docker compose build
 ### Testing Interactive Mode
 
 ```bash
+# S3 or USB backend
 sudo docker compose run --rm borgbackup bash
+
+# Local backend
+sudo docker compose --profile local run --rm borgbackup-local bash
 ```
 
 ### Running Backups
 
 ```bash
+# Using wrapper script
 ./run-backup.sh
-# or
+
+# Direct execution (S3/USB)
 sudo docker compose run --rm borgbackup /usr/sbin/backup.sh
+
+# Direct execution (Local)
+sudo docker compose --profile local run --rm borgbackup-local /usr/sbin/backup.sh
 ```
 
 ## Debugging
@@ -217,16 +310,39 @@ LOGGING=DEBUG
 ```
 
 ### Debug Output Includes
-- S3 configuration details
-- AWS connectivity tests
-- Mount verification
-- s3fs process details
-- Detailed error logs
+- Backend selection information
+- S3/USB/Local configuration details
+- Mount verification details
+- Process details and logs
+- Detailed error messages
+
+### USB Debugging
+```bash
+# List all block devices
+sudo blkid
+
+# Check connected devices
+lsblk
+
+# Check device details
+sudo blkid /dev/sdb1
+```
 
 ## Technical Constraints
 
-1. **Privileged Container**: Required for FUSE mounts - security consideration
-2. **Root Access**: Container runs as root for mount operations
-3. **AppArmor Disabled**: Required on some systems for FUSE to work
-4. **S3 Latency**: s3fs introduces latency compared to local filesystems
-5. **FUSE Overhead**: Minor performance impact from FUSE layer
+### S3 Backend
+1. **Privileged Container**: Required for FUSE mounts
+2. **AppArmor Disabled**: Required on some systems for FUSE
+3. **S3 Latency**: s3fs introduces latency compared to local
+4. **FUSE Overhead**: Minor performance impact
+
+### USB Backend
+1. **Privileged Container**: Required for device access
+2. **Device Must Be Connected**: Before container starts
+3. **UUID Required**: Device paths can change
+4. **Filesystem Support**: Limited by installed tools
+
+### Local Backend
+1. **Path Must Exist**: On host before container starts
+2. **Permissions**: Host path must be writable
+3. **Uses Profile**: Requires `--profile local` flag

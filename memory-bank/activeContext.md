@@ -2,47 +2,78 @@
 
 ## Current Work Focus
 
-The project is in a **stable, production-ready state**. The core functionality for dockerized backups with S3 storage is complete and documented.
+The project is in a **stable, production-ready state** with **multi-backend storage support**. The system now supports three storage backends: AWS S3, USB devices, and local/NAS storage.
 
 ## Recent Changes
 
-Based on the latest commit (`7fa77b9a6578f59330952ef17eafda240ad0d540`):
+Latest implementation (December 2025):
 
-- Project structure is established
-- All core scripts are implemented
-- README documentation is comprehensive
-- Memory Bank initialized
+- ✅ **Multi-Backend Storage Support** implemented
+  - S3 backend (existing, refactored)
+  - USB backend with UUID auto-detection
+  - Local/NAS backend with bind mount
+- ✅ New environment variable `BACKUP_STORAGE_TYPE` for backend selection
+- ✅ Dockerfile updated with USB filesystem tools (ntfs-3g, util-linux, etc.)
+- ✅ docker-compose.yml with profiles for local storage
+- ✅ Comprehensive documentation for all backends
 
 ## Current State
 
 ### What's Working
 - ✅ Docker container builds successfully
-- ✅ S3 mounting via s3fs works with proper credentials
-- ✅ BorgBackup operations (create, list, prune) functional
+- ✅ **S3 backend** - S3 mounting via s3fs with proper credentials
+- ✅ **USB backend** - Auto-detection by UUID, supports ext4/ntfs/xfs/btrfs
+- ✅ **Local backend** - Bind mount for NAS/network shares
+- ✅ BorgBackup operations (create, list, prune) functional on all backends
 - ✅ Interactive mode for manual operations
-- ✅ Automated backup script (`backup.sh`)
+- ✅ Automated backup script (`backup.sh`) with backend-aware verification
 - ✅ Wrapper script (`run-backup.sh`) for easy execution
 - ✅ Mailcow backup integration
 - ✅ Debug/INFO logging modes
-- ✅ Graceful cleanup and unmounting
+- ✅ Graceful cleanup and unmounting for all backends
 
 ### Active Components
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Dockerfile | Stable | Python 3.13.7, BorgBackup 1.4.1, s3fs 1.95-1 |
-| docker-compose.yml | Stable | Privileged mode for FUSE |
-| entrypoint | Stable | S3 mount, cleanup handlers |
-| backup.sh | Stable | Full system backup with exclusions |
+| Dockerfile | Stable | Python 3.13.7, BorgBackup 1.4.1, s3fs 1.95-1, USB tools |
+| docker-compose.yml | Stable | Multi-backend env vars, local profile |
+| entrypoint | Stable | Backend selection, S3/USB/Local setup & cleanup |
+| backup.sh | Stable | Backend-aware verification and logging |
 | run-backup.sh | Stable | Host-side wrapper |
+
+## Storage Backend Quick Reference
+
+### Environment Variable: `BACKUP_STORAGE_TYPE`
+
+| Value | Backend | Required Config |
+|-------|---------|-----------------|
+| `s3` (default) | AWS S3 via s3fs | `S3_BUCKET_NAME`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` |
+| `usb` | USB device | `USB_DEVICE_UUID` |
+| `local` | Local/NAS path | `LOCAL_BACKUP_PATH` (use `--profile local` service) |
+
+### Usage Examples
+```bash
+# S3 Backend (default)
+BACKUP_STORAGE_TYPE=s3
+sudo docker compose run --rm borgbackup /usr/sbin/backup.sh
+
+# USB Backend
+BACKUP_STORAGE_TYPE=usb
+sudo docker compose run --rm borgbackup /usr/sbin/backup.sh
+
+# Local/NAS Backend
+BACKUP_STORAGE_TYPE=local
+sudo docker compose --profile local run --rm borgbackup-local /usr/sbin/backup.sh
+```
 
 ## Next Steps
 
 ### Potential Enhancements
-1. **Additional Dump Functions**: MySQL, PostgreSQL dump support (placeholders exist)
-2. **Notification System**: Email/Slack alerts on backup completion/failure
-3. **Health Checks**: Docker health check for monitoring
-4. **Restore Script**: Automated restoration helper
-5. **Multi-Repository**: Support for multiple backup destinations
+1. **SSH Backend**: Direct backup to remote Linux server (Borg native SSH support)
+2. **Database Dumps**: MySQL, PostgreSQL dump support (placeholders exist)
+3. **Notification System**: Email/Slack alerts on backup completion/failure
+4. **Health Checks**: Docker health check for monitoring
+5. **Restore Script**: Automated restoration helper
 
 ### Technical Debt
 - `start` script is empty (placeholder)
@@ -53,16 +84,17 @@ Based on the latest commit (`7fa77b9a6578f59330952ef17eafda240ad0d540`):
 ### Command Execution
 Always use Docker Compose to run backup commands:
 ```bash
-# Correct
+# S3 or USB backend
 sudo docker compose run --rm borgbackup <command>
 
-# Incorrect (never run directly on host)
-borg <command>
+# Local backend (use profile)
+sudo docker compose --profile local run --rm borgbackup-local <command>
 ```
 
 ### Environment Configuration
 - Always copy `.env.example` to `.env`
 - Never commit `.env` (contains secrets)
+- Set `BACKUP_STORAGE_TYPE` based on your storage choice
 - Use DEBUG logging for troubleshooting only
 
 ### Backup Best Practices
@@ -73,36 +105,59 @@ borg <command>
 
 ## Learnings & Project Insights
 
-### s3fs Considerations
+### Multi-Backend Architecture
+- Entrypoint script uses case/switch for backend selection
+- Each backend has setup/verify/cleanup functions
+- Common mount point `/mnt/backup` for all backends
+- Backend-specific environment variable validation
+
+### USB Backend Insights
+- `blkid -U` for UUID-based device lookup
+- Supports multiple filesystems (ext4, ntfs, xfs, btrfs, vfat)
+- Container needs `/dev` mount for device access
+- Filesystem type auto-detected via `blkid -s TYPE`
+
+### Local Backend Insights
+- Uses Docker Compose profiles (`--profile local`)
+- Bind mount from host to `/mnt/backup`
+- Separate service `borgbackup-local` in docker-compose.yml
+- No privileged mode needed for local backend
+
+### s3fs Considerations (S3 Backend)
 - Requires privileged Docker container for FUSE
 - AppArmor must be disabled/unconfined
 - 3-second sleep needed after mount for initialization
 - Kernel cache improves performance significantly
 
-### Borg on S3
-- s3fs latency acceptable for backup operations
-- Deduplication still effective despite FUSE layer
-- Repository locking works correctly
-
-### Interactive vs Non-Interactive
-- Interactive mode (`-t` flag): No cleanup trap, direct exec
-- Non-interactive: Background process, signal handlers, cleanup on exit
-- This distinction prevents cleanup issues in interactive shells
-
 ## Configuration Quick Reference
 
-### Environment Variables
+### Common Environment Variables
 ```bash
-# Required
+# Storage Backend (s3 | usb | local)
+BACKUP_STORAGE_TYPE=s3
+
+# Borg Configuration
+BORG_REPO=/mnt/backup/borgbackup
+BORG_PASSPHRASE=secure-phrase
+LOGGING=INFO
+```
+
+### S3 Backend Variables
+```bash
 S3_BUCKET_NAME=your-bucket
 AWS_ACCESS_KEY_ID=AKIA...
 AWS_SECRET_ACCESS_KEY=secret...
-BORG_PASSPHRASE=secure-phrase
-
-# Optional (with defaults)
 AWS_DEFAULT_REGION=us-east-1
-LOGGING=INFO
-BORG_REPO=/mnt/backup/borgbackup
+```
+
+### USB Backend Variables
+```bash
+USB_DEVICE_UUID=1234-5678-90AB-CDEF
+```
+
+### Local Backend Variables
+```bash
+LOCAL_BACKUP_PATH=/mnt/nas/backups
 ```
 
 ### Common Commands
@@ -110,8 +165,11 @@ BORG_REPO=/mnt/backup/borgbackup
 # Build container
 sudo docker compose build
 
-# Interactive shell
+# Interactive shell (S3/USB)
 sudo docker compose run --rm borgbackup bash
+
+# Interactive shell (Local)
+sudo docker compose --profile local run --rm borgbackup-local bash
 
 # Run backup
 ./run-backup.sh

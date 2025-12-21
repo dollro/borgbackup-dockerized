@@ -2,7 +2,7 @@
 
 ## System Architecture
 
-### High-Level Architecture
+### High-Level Architecture (Multi-Backend)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -11,50 +11,83 @@
 │  ┌───────────────────────────────────────────────────────────────────┐ │
 │  │                      DOCKER CONTAINER                              │ │
 │  │                                                                    │ │
-│  │  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐           │ │
-│  │  │  entrypoint │───►│   s3fs      │───►│  /mnt/backup│           │ │
-│  │  │  (bash)     │    │  (FUSE)     │    │  (S3 mount) │           │ │
-│  │  └─────────────┘    └─────────────┘    └──────┬──────┘           │ │
-│  │         │                                      │                   │ │
-│  │         ▼                                      ▼                   │ │
-│  │  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐           │ │
-│  │  │  Command    │───►│  BorgBackup │───►│  Repository │           │ │
-│  │  │  (backup.sh)│    │  (borg)     │    │  (encrypted)│           │ │
-│  │  └─────────────┘    └──────┬──────┘    └─────────────┘           │ │
-│  │                            │                                       │ │
-│  │                            ▼                                       │ │
-│  │                     ┌─────────────┐                               │ │
-│  │                     │ /mnt/target │◄──── Host filesystem          │ │
-│  │                     │  (bind)     │                               │ │
-│  │                     └─────────────┘                               │ │
+│  │  ┌─────────────┐    ┌─────────────────────────────────────────┐   │ │
+│  │  │  entrypoint │───►│     STORAGE BACKEND SELECTION           │   │ │
+│  │  │  (bash)     │    │     (BACKUP_STORAGE_TYPE)               │   │ │
+│  │  └─────────────┘    └──────────────┬──────────────────────────┘   │ │
+│  │                                     │                              │ │
+│  │         ┌───────────────────────────┼───────────────────────────┐ │ │
+│  │         │                           │                           │ │ │
+│  │         ▼                           ▼                           ▼ │ │
+│  │  ┌─────────────┐           ┌─────────────┐           ┌─────────────┐│
+│  │  │  S3 Backend │           │ USB Backend │           │Local Backend││
+│  │  │  (s3fs)     │           │ (blkid+mount│           │ (bind mount)││
+│  │  └──────┬──────┘           └──────┬──────┘           └──────┬──────┘│
+│  │         │                         │                         │      │ │
+│  │         └─────────────────────────┼─────────────────────────┘      │ │
+│  │                                   ▼                                │ │
+│  │                          ┌─────────────┐                           │ │
+│  │                          │ /mnt/backup │◄── Common mount point     │ │
+│  │                          └──────┬──────┘                           │ │
+│  │                                 │                                  │ │
+│  │  ┌─────────────┐         ┌──────┴──────┐         ┌─────────────┐  │ │
+│  │  │  Command    │────────►│  BorgBackup │────────►│  Repository │  │ │
+│  │  │  (backup.sh)│         │  (borg)     │         │  (encrypted)│  │ │
+│  │  └─────────────┘         └──────┬──────┘         └─────────────┘  │ │
+│  │                                 │                                  │ │
+│  │                                 ▼                                  │ │
+│  │                          ┌─────────────┐                           │ │
+│  │                          │ /mnt/target │◄── Host filesystem        │ │
+│  │                          └─────────────┘                           │ │
 │  └───────────────────────────────────────────────────────────────────┘ │
 │                                                                         │
-│  / ─────────────────────────────────────────────────────────────────►  │
-│  (bind mounted to container)                                            │
-│                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-                          ┌─────────────────┐
-                          │    AWS S3       │
-                          │  (via HTTPS)    │
-                          └─────────────────┘
+         │                       │                       │
+         ▼                       ▼                       ▼
+   ┌───────────┐          ┌───────────┐          ┌───────────┐
+   │  AWS S3   │          │ USB Drive │          │ Local/NAS │
+   │ (HTTPS)   │          │ (block)   │          │ (path)    │
+   └───────────┘          └───────────┘          └───────────┘
 ```
 
 ## Component Relationships
 
-### Container Lifecycle
+### Container Lifecycle (Multi-Backend)
 
 ```
 ┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
 │   docker     │────►│  entrypoint  │────►│   command    │────►│   cleanup    │
-│   run        │     │  (mount s3)  │     │  (borg/bash) │     │  (unmount)   │
+│   run        │     │  (backend    │     │  (borg/bash) │     │  (backend    │
+│              │     │   setup)     │     │              │     │   cleanup)   │
 └──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘
                             │                     │                     │
                             ▼                     ▼                     ▼
-                      Mount S3 bucket      Execute backup         Unmount S3
-                      Verify mount         or user command        Clean temp files
-                      Set up cleanup                              Exit gracefully
+                     Select backend        Execute backup         Cleanup backend
+                     Setup mount           or user command        Unmount storage
+                     Verify access                                Clean temp files
+```
+
+### Backend Selection Flow
+
+```
+BACKUP_STORAGE_TYPE
+        │
+        ├── "s3"  ──────► setup_s3_backend()
+        │                      │
+        │                      ├── Create credentials file
+        │                      ├── Mount with s3fs
+        │                      └── Verify S3 mount
+        │
+        ├── "usb" ──────► setup_usb_backend()
+        │                      │
+        │                      ├── Find device by UUID (blkid -U)
+        │                      ├── Detect filesystem type
+        │                      └── Mount device to /mnt/backup
+        │
+        └── "local" ────► setup_local_backend()
+                               │
+                               ├── Verify path exists
+                               └── Verify write access
 ```
 
 ### Script Dependency Chain
@@ -68,12 +101,14 @@ run-backup.sh (host)
                     │
                     ├── entrypoint (initialization)
                     │       │
-                    │       ├── Mount S3 bucket
-                    │       ├── Verify mount
+                    │       ├── Select backend (BACKUP_STORAGE_TYPE)
+                    │       ├── Setup backend (setup_*_backend())
+                    │       ├── Verify mount (verify_*_mount())
                     │       └── Set up signal handlers
                     │
                     └── backup.sh (main logic)
                             │
+                            ├── verify_storage_backend()
                             ├── perform_dumps()
                             │       └── perform_dumps_mailcow()
                             │
@@ -84,28 +119,53 @@ run-backup.sh (host)
 
 ## Design Patterns
 
-### 1. Entrypoint Pattern
-The entrypoint script handles all initialization before the main command runs:
+### 1. Storage Backend Pattern (New)
+Modular backend selection with consistent interface:
+
+```bash
+# Pattern: Backend Selection → Setup → Verify → Execute → Cleanup
+case "$BACKUP_STORAGE_TYPE" in
+    s3)
+        setup_s3_backend
+        ;;
+    usb)
+        setup_usb_backend
+        ;;
+    local)
+        setup_local_backend
+        ;;
+esac
+```
+
+Each backend implements:
+- `setup_*_backend()` - Initialize and mount storage
+- `verify_*_mount()` - Verify access and permissions
+- `cleanup_*_backend()` - Unmount and clean up
+
+### 2. Entrypoint Pattern
+The entrypoint script handles all initialization before the main command:
 
 ```bash
 # Pattern: Initialize → Execute → Cleanup
-mkdir -p /mnt/backup              # Setup
-s3fs ... /mnt/backup              # Mount
-exec "$@"                          # Execute command
-cleanup                            # Teardown (via trap)
+setup_storage_backend         # Setup chosen backend
+exec "$@"                     # Execute command
+cleanup                       # Teardown (via trap)
 ```
 
-### 2. Environment-Based Configuration
+### 3. Environment-Based Configuration
 All configuration via environment variables:
 
 ```yaml
 environment:
+  - BACKUP_STORAGE_TYPE=${BACKUP_STORAGE_TYPE:-s3}
   - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+  - USB_DEVICE_UUID=${USB_DEVICE_UUID}
+  - LOCAL_BACKUP_PATH=${LOCAL_BACKUP_PATH}
   - BORG_REPO=${BORG_REPO}
-  - LOGGING=${LOGGING:-INFO}       # With defaults
+  - LOGGING=${LOGGING:-INFO}
 ```
 
-### 3. Interactive vs Non-Interactive Detection
+### 4. Interactive vs Non-Interactive Detection
 Different behavior based on terminal attachment:
 
 ```bash
@@ -120,12 +180,11 @@ else
 fi
 ```
 
-### 4. Modular Dump System
+### 5. Modular Dump System
 Extensible pre-backup dump functions:
 
 ```bash
 perform_dumps() {
-    # Create dump directory
     mkdir -p "${DUMP_DIR}"
     
     # Call service-specific dumps
@@ -135,11 +194,11 @@ perform_dumps() {
 }
 ```
 
-### 5. Graceful Cleanup Pattern
+### 6. Graceful Cleanup Pattern
 Multi-step cleanup with fallbacks:
 
 ```bash
-cleanup() {
+cleanup_*_backend() {
     # Step 1: Normal unmount with timeout
     timeout 10s umount /mnt/backup || \
     # Step 2: Lazy unmount
@@ -148,28 +207,27 @@ cleanup() {
     umount -f /mnt/backup
     
     # Clean temp files
-    rm -f /etc/passwd-s3fs
-    rm -rf /tmp/s3fs_cache
+    # (backend-specific cleanup)
 }
 ```
 
-### 6. Debug/Production Logging Pattern
+### 7. Debug/Production Logging Pattern
 Conditional verbosity based on environment:
 
 ```bash
 if [ "$LOGGING" = "DEBUG" ]; then
-    # Full debug output with curl tests, stats, etc.
-    s3fs ... -o dbglevel=info -o curldbg
+    # Full debug output
+    echo "Detailed information..."
 else
     # Minimal output
-    s3fs ... >/dev/null 2>&1
 fi
 ```
 
 ## Critical Implementation Paths
 
-### S3 Mount Path
+### Backend Setup Paths
 
+#### S3 Backend Path
 ```
 1. Validate environment (S3_BUCKET_NAME, AWS_*)
 2. Create credentials file (/etc/passwd-s3fs)
@@ -180,10 +238,29 @@ fi
 7. Report success/failure
 ```
 
+#### USB Backend Path
+```
+1. Validate environment (USB_DEVICE_UUID)
+2. Find device by UUID (blkid -U)
+3. Detect filesystem type (blkid -s TYPE)
+4. Create mount point (/mnt/backup)
+5. Mount with appropriate options
+6. Verify mount and write access
+7. Report success/failure
+```
+
+#### Local Backend Path
+```
+1. Validate environment (LOCAL_BACKUP_PATH)
+2. Verify /mnt/backup exists (bind mounted by Docker)
+3. Test write access
+4. Report success/failure
+```
+
 ### Backup Execution Path
 
 ```
-1. Verify S3 mount is active
+1. Verify storage backend is accessible
 2. Perform pre-backup dumps (Mailcow, etc.)
 3. Change to /mnt/target (host root)
 4. Execute borg create with exclusions
@@ -191,16 +268,29 @@ fi
 6. Log results and exit codes
 ```
 
-### Cleanup Path
+### Cleanup Paths
 
+#### S3 Cleanup
 ```
-1. Catch SIGINT/SIGTERM (non-interactive only)
-2. Attempt normal unmount with 10s timeout
-3. Fall back to lazy unmount (-l)
-4. Fall back to force unmount (-f)
-5. Remove credentials file
-6. Remove cache directory
-7. Exit with appropriate code
+1. Catch SIGINT/SIGTERM
+2. Attempt unmount with timeout
+3. Fall back to lazy/force unmount
+4. Remove /etc/passwd-s3fs
+5. Remove /tmp/s3fs_cache
+```
+
+#### USB Cleanup
+```
+1. Catch SIGINT/SIGTERM
+2. Sync filesystem
+3. Attempt unmount
+4. Fall back to lazy unmount
+```
+
+#### Local Cleanup
+```
+1. Sync filesystem
+2. (No unmount needed - bind mount)
 ```
 
 ## File System Layout in Container
@@ -208,17 +298,20 @@ fi
 ```
 /
 ├── mnt/
-│   ├── backup/              ← S3 bucket (s3fs)
+│   ├── backup/              ← Storage mount point (all backends)
 │   │   └── borgbackup/      ← Borg repository (BORG_REPO)
 │   └── target/              ← Host filesystem (bind mount)
 │       ├── home/
 │       ├── etc/
 │       ├── var/
 │       └── ...
+├── dev/                     ← Device access (for USB backend)
+│   ├── sda, sdb, ...
+│   └── fuse
 ├── tmp/
-│   └── s3fs_cache/          ← s3fs cache directory
+│   └── s3fs_cache/          ← s3fs cache (S3 backend only)
 ├── etc/
-│   └── passwd-s3fs          ← S3 credentials (runtime)
+│   └── passwd-s3fs          ← S3 credentials (S3 backend only)
 ├── var/
 │   └── log/
 │       └── borgbackup/      ← Backup logs
@@ -249,8 +342,46 @@ exit ${global_exit}
 ### Logging Functions
 
 ```bash
-log() { echo "[$(date)] [$1] $2" | tee -a "$LOG_FILE"; }
-info() { log "INFO" "$@"; }
-error() { log "ERROR" "$@"; }
-success() { log "SUCCESS" "$@"; }
+log_info() { echo "[INFO] $1"; }
+log_debug() { [ "$LOGGING" = "DEBUG" ] && echo "[DEBUG] $1"; }
+log_error() { echo "[ERROR] $1" >&2; }
+log_success() { echo "[SUCCESS] $1"; }
+```
+
+### Backend-Aware Error Messages
+
+```bash
+verify_storage_backend() {
+    case "$BACKUP_STORAGE_TYPE" in
+        s3)    error "S3 bucket is not mounted..." ;;
+        usb)   error "USB device is not mounted..." ;;
+        local) error "Local path does not exist..." ;;
+    esac
+}
+```
+
+## Docker Compose Patterns
+
+### Service Profiles
+```yaml
+services:
+  # Default service (S3, USB)
+  borgbackup:
+    # ... configuration
+
+  # Profile-based service (Local)
+  borgbackup-local:
+    profiles:
+      - local
+    volumes:
+      - ${LOCAL_BACKUP_PATH}:/mnt/backup
+```
+
+Usage:
+```bash
+# S3 or USB (default)
+docker compose run --rm borgbackup ...
+
+# Local (with profile)
+docker compose --profile local run --rm borgbackup-local ...
 ```
