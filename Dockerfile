@@ -5,6 +5,8 @@ RUN --mount=type=cache,id=apt-cache,target=/var/cache/apt apt-get update \
   && apt-get install -y s3fs=1.95-1 glib-networking curl gnupg gzip zip unzip \
   # dependencies for borgbackup
   && apt-get install -y python3-dev libacl1-dev libssl-dev liblz4-dev libzstd-dev libxxhash-dev build-essential pkg-config libfuse-dev fuse \
+  # dependencies for USB storage backend (blkid, ntfs support)
+  && apt-get install -y util-linux ntfs-3g e2fsprogs xfsprogs btrfs-progs dosfstools \
   # cleaning up unused files
   && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
   && rm -rf /var/lib/apt/lists/*

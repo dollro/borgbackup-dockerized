@@ -8,25 +8,62 @@ services:
     tty: true
     privileged: true
     environment:
-      # S3 Configuration
+      # Storage Backend Selection
+      # Options: "s3" | "usb" | "local"
+      - BACKUP_STORAGE_TYPE=${BACKUP_STORAGE_TYPE:-s3}
+      
+      # Logging Configuration
+      - LOGGING=${LOGGING:-INFO}
+      
+      # Borg Configuration
+      - BORG_REPO=${BORG_REPO:-/mnt/backup/borgbackup}
+      - BORG_PASSPHRASE=${BORG_PASSPHRASE}
+      
+      # === S3 Configuration (when BACKUP_STORAGE_TYPE=s3) ===
       - S3_BUCKET_NAME=${S3_BUCKET_NAME}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-east-1}
-      # Logging Configuration
-      - LOGGING=${LOGGING:-INFO}
-      # Borg Configuration
-      - BORG_REPO=${BORG_REPO}
-      - BORG_PASSPHRASE=${BORG_PASSPHRASE}
+      
+      # === USB Configuration (when BACKUP_STORAGE_TYPE=usb) ===
+      - USB_DEVICE_UUID=${USB_DEVICE_UUID}
+      
+      # === Local Configuration (when BACKUP_STORAGE_TYPE=local) ===
+      - LOCAL_BACKUP_PATH=${LOCAL_BACKUP_PATH}
     volumes:
+      # Host filesystem access for backup source
       - /:/mnt/target
-      # Allow s3fs to work with FUSE
-      - /dev/fuse:/dev/fuse
+      
+      # Device access for FUSE (S3) and USB block devices
+      - /dev:/dev
       - /etc/passwd:/etc/passwd:ro
       - /etc/group:/etc/group:ro
-    devices:
-      - /dev/fuse:/dev/fuse
     cap_add:
       - SYS_ADMIN
     security_opt:
       - apparmor:unconfined
+
+  # Alternative service for local storage backend (bind mount approach)
+  # Use this when BACKUP_STORAGE_TYPE=local
+  borgbackup-local:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    image: borgbackup
+    stdin_open: true
+    tty: true
+    profiles:
+      - local
+    environment:
+      - BACKUP_STORAGE_TYPE=local
+      - LOGGING=${LOGGING:-INFO}
+      - BORG_REPO=${BORG_REPO:-/mnt/backup/borgbackup}
+      - BORG_PASSPHRASE=${BORG_PASSPHRASE}
+      - LOCAL_BACKUP_PATH=${LOCAL_BACKUP_PATH}
+    volumes:
+      # Host filesystem access for backup source
+      - /:/mnt/target
+      # Local backup destination (bind mount from host)
+      - ${LOCAL_BACKUP_PATH:-/tmp/backup}:/mnt/backup
+      - /etc/passwd:/etc/passwd:ro
+      - /etc/group:/etc/group:ro

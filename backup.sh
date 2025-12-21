@@ -3,11 +3,12 @@
 # Dockerized BorgBackup Script
 # Adapted from baremetal backup script to work inside container
 # The host filesystem is mounted at /mnt/target
-# The S3 bucket is mounted at /mnt/backup
+# The backup storage is mounted at /mnt/backup (S3, USB, or local)
 
 set -o pipefail
 
 # Configuration
+BACKUP_STORAGE_TYPE="${BACKUP_STORAGE_TYPE:-s3}"
 LOG_DIR="/target/backup/log"
 LOG_FILE="${LOG_DIR}/backup-$(date +%Y%m%d-%H%M%S).log"
 DUMP_BASE_DIR="/mnt/target/backup/dump"
@@ -94,20 +95,75 @@ perform_dumps() {
     info "Pre-backup dumps completed"
 }
 
+# Verify storage backend is accessible
+verify_storage_backend() {
+    info "Verifying storage backend (${BACKUP_STORAGE_TYPE})..."
+    
+    case "$BACKUP_STORAGE_TYPE" in
+        s3)
+            # For S3, check if s3fs mount is present
+            if ! mount | grep -q "/mnt/backup"; then
+                error "S3 bucket is not mounted at /mnt/backup! Exiting."
+                return 1
+            fi
+            ;;
+        usb)
+            # For USB, check if device is mounted
+            if ! mount | grep -q "/mnt/backup"; then
+                error "USB device is not mounted at /mnt/backup! Exiting."
+                return 1
+            fi
+            ;;
+        local)
+            # For local, check if directory exists and is writable
+            if [ ! -d "/mnt/backup" ]; then
+                error "Local backup path /mnt/backup does not exist! Exiting."
+                return 1
+            fi
+            ;;
+        *)
+            error "Unknown storage backend: ${BACKUP_STORAGE_TYPE}"
+            return 1
+            ;;
+    esac
+    
+    # Common check: verify write access
+    if ! touch /mnt/backup/.backup_test 2>/dev/null; then
+        error "Cannot write to /mnt/backup! Check permissions."
+        return 1
+    fi
+    rm -f /mnt/backup/.backup_test
+    
+    success "Storage backend '${BACKUP_STORAGE_TYPE}' is accessible"
+    return 0
+}
+
+# Get storage type description for logging
+get_storage_description() {
+    case "$BACKUP_STORAGE_TYPE" in
+        s3)    echo "S3 bucket" ;;
+        usb)   echo "USB device" ;;
+        local) echo "Local path" ;;
+        *)     echo "Unknown storage" ;;
+    esac
+}
+
 # Main backup execution
 main() {
+    local storage_desc=$(get_storage_description)
+    
     info "========================================="
     info "Starting Dockerized BorgBackup Process"
     info "========================================="
+    info "Storage Backend: ${BACKUP_STORAGE_TYPE} (${storage_desc})"
     info "Host root mounted at: /mnt/target"
-    info "S3 bucket mounted at: /mnt/backup"
+    info "Backup storage at: /mnt/backup"
     info "Repository: ${BORG_REPO}"
     info "Log file: ${LOG_FILE}"
     echo ""
     
-    # Check if S3 is mounted
-    if ! mount | grep -q "/mnt/backup"; then
-        error "S3 bucket is not mounted at /mnt/backup! Exiting."
+    # Verify storage backend is accessible
+    if ! verify_storage_backend; then
         exit 1
     fi
     
