@@ -31,7 +31,7 @@ fi
 
 # Rebuild the image if needed (in case backup.sh was updated)
 echo -e "${YELLOW}Building/updating Docker image...${NC}"
-sudo docker compose build
+docker compose build
 
 # Run the backup
 echo -e "${GREEN}Running backup script...${NC}"

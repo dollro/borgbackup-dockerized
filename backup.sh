@@ -102,14 +102,16 @@ verify_storage_backend() {
     case "$BACKUP_STORAGE_TYPE" in
         s3)
             # For S3, check if s3fs mount is present
-            if ! mount | grep -q "/mnt/backup"; then
+            # Use mountpoint command for reliable detection (avoids Docker overlay false matches)
+            if ! mountpoint -q /mnt/backup; then
                 error "S3 bucket is not mounted at /mnt/backup! Exiting."
                 return 1
             fi
             ;;
         usb)
             # For USB, check if device is mounted
-            if ! mount | grep -q "/mnt/backup"; then
+            # Use mountpoint command for reliable detection (avoids Docker overlay false matches)
+            if ! mountpoint -q /mnt/backup; then
                 error "USB device is not mounted at /mnt/backup! Exiting."
                 return 1
             fi

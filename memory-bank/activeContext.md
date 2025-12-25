@@ -137,7 +137,7 @@ sudo docker compose --profile local run --rm borgbackup-local <command>
 BACKUP_STORAGE_TYPE=s3
 
 # Borg Configuration
-BORG_REPO=/mnt/backup/borgbackup
+BORG_REPO_PATH=borgbackup
 BORG_PASSPHRASE=secure-phrase
 LOGGING=INFO
 ```

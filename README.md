@@ -102,7 +102,7 @@ AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
 AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
 AWS_DEFAULT_REGION=eu-central-1
 
-BORG_REPO=/mnt/backup/borgbackup
+BORG_REPO_PATH=borgbackup
 BORG_PASSPHRASE=your-secure-passphrase
 ```
 
@@ -133,7 +133,7 @@ Example output:
 BACKUP_STORAGE_TYPE=usb
 USB_DEVICE_UUID=1234-5678-90AB-CDEF
 
-BORG_REPO=/mnt/backup/borgbackup
+BORG_REPO_PATH=borgbackup
 BORG_PASSPHRASE=your-secure-passphrase
 ```
 
@@ -175,13 +175,13 @@ sudo mkdir -p /mnt/backup-storage
 BACKUP_STORAGE_TYPE=local
 LOCAL_BACKUP_PATH=/mnt/backup-storage
 
-BORG_REPO=/mnt/backup/borgbackup
+BORG_REPO_PATH=borgbackup
 BORG_PASSPHRASE=your-secure-passphrase
 ```
 
-3. **Run backup using the local profile**:
+3. **Run backup**:
 ```bash
-sudo docker compose --profile local run --rm borgbackup-local /usr/sbin/backup.sh
+sudo docker compose run --rm borgbackup /usr/sbin/backup.sh
 ```
 
 #### Local Storage Use Cases
@@ -200,11 +200,8 @@ sudo docker compose --profile local run --rm borgbackup-local /usr/sbin/backup.s
 For manual backup operations and exploration:
 
 ```bash
-# S3 or USB backend
+# All backends (S3, USB, or Local)
 sudo docker compose run --rm borgbackup bash
-
-# Local backend
-sudo docker compose --profile local run --rm borgbackup-local bash
 ```
 
 Once inside the container:
@@ -265,7 +262,7 @@ sudo docker compose run --rm borgbackup \
 |----------|-------------|---------|----------|
 | **Common** |
 | `BACKUP_STORAGE_TYPE` | Storage backend: `s3`, `usb`, or `local` | `s3` | No |
-| `BORG_REPO` | Path to Borg repository | `/mnt/backup/borgbackup` | No |
+| `BORG_REPO_PATH` | Repository path relative to storage mount (supports subdirs like `server1/backups`) | `borgbackup` | No |
 | `BORG_PASSPHRASE` | Encryption passphrase | - | Yes |
 | `LOGGING` | Logging verbosity: `INFO` or `DEBUG` | `INFO` | No |
 | **S3 Backend** |

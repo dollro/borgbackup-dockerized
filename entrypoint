@@ -7,6 +7,12 @@ LOGGING="${LOGGING:-INFO}"
 # Storage backend type (default to s3 for backward compatibility)
 BACKUP_STORAGE_TYPE="${BACKUP_STORAGE_TYPE:-s3}"
 
+# Hardcoded base mount point (internal to container)
+BACKUP_MOUNT="/mnt/backup"
+
+# Construct BORG_REPO from relative path (hides /mnt/backup from user config)
+export BORG_REPO="${BACKUP_MOUNT}/${BORG_REPO_PATH:-borgbackup}"
+
 # Create mount directory
 mkdir -p /mnt/backup
 

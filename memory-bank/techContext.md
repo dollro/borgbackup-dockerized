@@ -105,7 +105,7 @@ llfuse
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `BORG_REPO` | Borg repository path | `/mnt/backup/borgbackup` |
+| `BORG_REPO_PATH` | Repository path relative to storage mount | `borgbackup` or `server1/backups` |
 | `BORG_PASSPHRASE` | Encryption passphrase | `secure-passphrase` |
 | `LOGGING` | Log verbosity | `INFO` or `DEBUG` |
 

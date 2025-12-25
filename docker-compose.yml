@@ -16,7 +16,7 @@ services:
       - LOGGING=${LOGGING:-INFO}
       
       # Borg Configuration
-      - BORG_REPO=${BORG_REPO:-/mnt/backup/borgbackup}
+      - BORG_REPO_PATH=${BORG_REPO_PATH:-borgbackup}
       - BORG_PASSPHRASE=${BORG_PASSPHRASE}
       
       # === S3 Configuration (when BACKUP_STORAGE_TYPE=s3) ===
@@ -38,32 +38,11 @@ services:
       - /dev:/dev
       - /etc/passwd:/etc/passwd:ro
       - /etc/group:/etc/group:ro
+      
+      # Local backup destination (bind mount from host)
+      # Used when BACKUP_STORAGE_TYPE=local, ignored for S3/USB (overwritten by FUSE/device mount)
+      - ${LOCAL_BACKUP_PATH:-/tmp/backup}:/mnt/backup
     cap_add:
       - SYS_ADMIN
     security_opt:
       - apparmor:unconfined
-
-  # Alternative service for local storage backend (bind mount approach)
-  # Use this when BACKUP_STORAGE_TYPE=local
-  borgbackup-local:
-    build:
-      context: .
-      dockerfile: ./Dockerfile
-    image: borgbackup
-    stdin_open: true
-    tty: true
-    profiles:
-      - local
-    environment:
-      - BACKUP_STORAGE_TYPE=local
-      - LOGGING=${LOGGING:-INFO}
-      - BORG_REPO=${BORG_REPO:-/mnt/backup/borgbackup}
-      - BORG_PASSPHRASE=${BORG_PASSPHRASE}
-      - LOCAL_BACKUP_PATH=${LOCAL_BACKUP_PATH}
-    volumes:
-      # Host filesystem access for backup source
-      - /:/mnt/target
-      # Local backup destination (bind mount from host)
-      - ${LOCAL_BACKUP_PATH:-/tmp/backup}:/mnt/backup
-      - /etc/passwd:/etc/passwd:ro
-      - /etc/group:/etc/group:ro
