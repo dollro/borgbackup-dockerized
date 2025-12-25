@@ -9,6 +9,7 @@ set -o pipefail
 
 # Configuration
 BACKUP_STORAGE_TYPE="${BACKUP_STORAGE_TYPE:-s3}"
+SHOW_PROGRESS="${SHOW_PROGRESS:-false}"
 LOG_DIR="/target/backup/log"
 LOG_FILE="${LOG_DIR}/backup-$(date +%Y%m%d-%H%M%S).log"
 DUMP_BASE_DIR="/mnt/target/backup/dump"
@@ -180,8 +181,16 @@ main() {
     # Change to /mnt/target so paths in archive are relative to host root
     cd /mnt/target
     
+    # Build progress option
+    PROGRESS_OPT=""
+    if [ "${SHOW_PROGRESS}" = "true" ]; then
+        PROGRESS_OPT="--progress"
+        info "Progress display enabled"
+    fi
+    
     borg create \
         --verbose \
+        ${PROGRESS_OPT} \
         --stats \
         --show-rc \
         --exclude-caches \
@@ -219,6 +228,7 @@ main() {
     info "========================================="
     
     borg prune \
+        ${PROGRESS_OPT} \
         --list \
         --glob-archives '{hostname}-*' \
         --show-rc \

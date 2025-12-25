@@ -236,6 +236,10 @@ sudo docker compose run --rm borgbackup borg init --encryption=repokey
 # List archives
 sudo docker compose run --rm borgbackup borg list
 
+# List contents of a specific archive (with path filter)
+sudo docker compose run --rm borgbackup \
+    borg list ::f4a8739ae326-2025-12-25T13:03:43 /home/rodo
+
 # Create manual backup
 sudo docker compose run --rm borgbackup \
     borg create ::'{hostname}-{now}' /mnt/target/home /mnt/target/etc
@@ -265,6 +269,7 @@ sudo docker compose run --rm borgbackup \
 | `BORG_REPO_PATH` | Repository path relative to storage mount (supports subdirs like `server1/backups`) | `borgbackup` | No |
 | `BORG_PASSPHRASE` | Encryption passphrase | - | Yes |
 | `LOGGING` | Logging verbosity: `INFO` or `DEBUG` | `INFO` | No |
+| `SHOW_PROGRESS` | Show real-time progress during backup: `true` or `false` | `false` | No |
 | **S3 Backend** |
 | `S3_BUCKET_NAME` | Name of S3 bucket | - | Yes (S3) |
 | `AWS_ACCESS_KEY_ID` | AWS access key | - | Yes (S3) |

@@ -15,6 +15,9 @@ services:
       # Logging Configuration
       - LOGGING=${LOGGING:-INFO}
       
+      # Progress Display (set to "true" to show real-time progress)
+      - SHOW_PROGRESS=${SHOW_PROGRESS:-false}
+      
       # Borg Configuration
       - BORG_REPO_PATH=${BORG_REPO_PATH:-borgbackup}
       - BORG_PASSPHRASE=${BORG_PASSPHRASE}
