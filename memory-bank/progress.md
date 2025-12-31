@@ -11,6 +11,7 @@ The backup solution is complete with support for multiple storage backends: AWS 
 |---------|--------|-------------|
 | Docker Container | ✅ Complete | Python 3.13.7 slim with all dependencies |
 | **Multi-Backend Storage** | ✅ Complete | S3, USB, and Local storage support |
+| **Automatic Lock Handling** | ✅ Complete | Three modes: false/manual/auto for stale locks |
 | S3 Integration | ✅ Complete | s3fs-fuse mounts S3 bucket as filesystem |
 | USB Integration | ✅ Complete | Auto-detect by UUID, multiple filesystems |
 | Local/NAS Integration | ✅ Complete | Bind mount for any host path |
@@ -153,6 +154,11 @@ The backup solution is complete with support for multiple storage backends: AWS 
 11. ~~**Dockerfile USB tools**~~ (util-linux, ntfs-3g, etc.)
 12. ~~**docker-compose.yml profiles**~~
 13. ~~**Backend-aware backup.sh**~~
+14. ~~**Automatic Lock Handling**~~ (December 31, 2025)
+    - `BORG_AUTO_BREAK_LOCK` environment variable
+    - Three modes: false (default), manual (prompt), auto (60s timeout)
+    - Retry logic for backup and prune operations
+    - Comprehensive troubleshooting documentation
 
 ### Future Milestones
 1. SSH backend support

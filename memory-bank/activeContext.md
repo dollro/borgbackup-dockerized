@@ -8,6 +8,17 @@ The project is in a **stable, production-ready state** with **multi-backend stor
 
 Latest implementation (December 2025):
 
+### Lock Handling Feature (Dec 31, 2025)
+- ✅ **Automatic Lock Handling** implemented
+  - New `BORG_AUTO_BREAK_LOCK` environment variable
+  - Three modes: `false` (default), `manual` (user prompt), `auto` (60s timeout)
+  - Handles stale locks from interrupted backups
+  - Retry logic for both backup and prune operations
+- ✅ Updated README with stale lock troubleshooting section
+- ✅ Updated `.env.example` with new configuration option
+- ✅ Enhanced `backup.sh` with lock detection and break-lock logic
+
+### Multi-Backend Storage Support
 - ✅ **Multi-Backend Storage Support** implemented
   - S3 backend (existing, refactored)
   - USB backend with UUID auto-detection

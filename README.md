@@ -321,6 +321,44 @@ lsblk
 - Check ownership: `sudo chown -R root:root /mnt/backup-storage`
 - Verify NAS/network share is properly mounted
 
+#### Borg: Stale Lock Error
+
+**Error:**
+```
+Failed to create/acquire the lock /mnt/backup/.../borgbackup/lock.exclusive (timeout).
+terminating with error status, rc 2
+```
+
+**Cause:** A previous backup was interrupted (container killed, system crash, etc.) and left a lock file behind. BorgBackup uses exclusive locks to prevent concurrent repository access.
+
+**Solution 1: Manual Lock Break**
+```bash
+# Start interactive shell
+sudo docker compose run --rm borgbackup bash
+
+# Break the lock
+borg break-lock /mnt/backup/backup-<hostname>/borgbackup
+
+# Exit and retry backup
+exit
+./run-backup.sh
+```
+
+**Solution 2: Automatic Lock Handling**
+
+Configure `BORG_AUTO_BREAK_LOCK` in your `.env` file:
+
+```bash
+# Options:
+# - false: Do nothing, fail immediately (default)
+# - manual: Prompt user to confirm breaking lock
+# - auto: Automatically break lock after 60 second timeout
+
+BORG_AUTO_BREAK_LOCK=manual  # or "auto"
+```
+
+With `manual` mode, the script will ask for confirmation before breaking the lock. With `auto` mode, it will wait 60 seconds and automatically break the lock if it persists.
+
 #### General: Backup Performance
 - Use compression: `--compression lz4` (already enabled)
 - Exclude unnecessary files with `--exclude` patterns

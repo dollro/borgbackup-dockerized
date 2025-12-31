@@ -10,6 +10,7 @@ set -o pipefail
 # Configuration
 BACKUP_STORAGE_TYPE="${BACKUP_STORAGE_TYPE:-s3}"
 SHOW_PROGRESS="${SHOW_PROGRESS:-false}"
+BORG_AUTO_BREAK_LOCK="${BORG_AUTO_BREAK_LOCK:-false}"
 LOG_DIR="/target/backup/log"
 LOG_FILE="${LOG_DIR}/backup-$(date +%Y%m%d-%H%M%S).log"
 DUMP_BASE_DIR="/mnt/target/backup/dump"
@@ -151,6 +152,81 @@ get_storage_description() {
     esac
 }
 
+# Handle Borg lock errors
+# Returns: 0 = lock broken and should retry, 1 = do not retry
+handle_borg_lock() {
+    local operation="$1"  # "backup" or "prune"
+    
+    error "Repository lock detected (previous backup may have been interrupted)"
+    
+    case "$BORG_AUTO_BREAK_LOCK" in
+        false)
+            error "BORG_AUTO_BREAK_LOCK=false: Not breaking lock automatically"
+            error "To resolve manually, run: borg break-lock ${BORG_REPO}"
+            return 1  # Do not retry
+            ;;
+        manual)
+            info "BORG_AUTO_BREAK_LOCK=manual: Requesting user confirmation"
+            echo ""
+            echo "═══════════════════════════════════════════════════════════"
+            echo "  REPOSITORY LOCK DETECTED"
+            echo "═══════════════════════════════════════════════════════════"
+            echo "The repository is locked, likely from an interrupted backup."
+            echo ""
+            echo -n "Do you want to break the lock and retry? (y/n): "
+            read -r response
+            echo ""
+            
+            if [[ "$response" =~ ^[Yy]$ ]]; then
+                info "User confirmed: Breaking lock..."
+                borg break-lock "${BORG_REPO}" 2>&1 | tee -a "${LOG_FILE}"
+                if [ ${PIPESTATUS[0]} -eq 0 ]; then
+                    success "Lock broken successfully, retrying ${operation}..."
+                    return 0  # Retry
+                else
+                    error "Failed to break lock"
+                    return 1  # Do not retry
+                fi
+            else
+                info "User declined: Not breaking lock"
+                return 1  # Do not retry
+            fi
+            ;;
+        auto)
+            info "BORG_AUTO_BREAK_LOCK=auto: Waiting 60 seconds before auto-breaking lock..."
+            echo ""
+            echo "═══════════════════════════════════════════════════════════"
+            echo "  REPOSITORY LOCK DETECTED - AUTO MODE"
+            echo "═══════════════════════════════════════════════════════════"
+            echo "The lock will be automatically broken in 60 seconds..."
+            echo "Press Ctrl+C to abort."
+            echo ""
+            
+            # Countdown timer
+            for i in {60..1}; do
+                printf "\r  Waiting: %2d seconds remaining..." "$i"
+                sleep 1
+            done
+            echo ""
+            echo ""
+            
+            info "Timeout reached: Breaking lock automatically..."
+            borg break-lock "${BORG_REPO}" 2>&1 | tee -a "${LOG_FILE}"
+            if [ ${PIPESTATUS[0]} -eq 0 ]; then
+                success "Lock broken successfully, retrying ${operation}..."
+                return 0  # Retry
+            else
+                error "Failed to break lock"
+                return 1  # Do not retry
+            fi
+            ;;
+        *)
+            error "Invalid BORG_AUTO_BREAK_LOCK value: ${BORG_AUTO_BREAK_LOCK}"
+            return 1  # Do not retry
+            ;;
+    esac
+}
+
 # Main backup execution
 main() {
     local storage_desc=$(get_storage_description)
@@ -188,31 +264,51 @@ main() {
         info "Progress display enabled"
     fi
     
-    borg create \
-        --verbose \
-        ${PROGRESS_OPT} \
-        --stats \
-        --show-rc \
-        --exclude-caches \
-        --compression lz4 \
-        --one-file-system \
-        --exclude 'backup/snapshots/*' \
-        --exclude 'backup/log/*' \
-        --exclude 'home/*/.cache/*' \
-        --exclude 'var/cache/*' \
-        --exclude 'var/tmp/*' \
-        --exclude 'dev/*' \
-        --exclude 'proc/*' \
-        --exclude 'sys/*' \
-        --exclude 'tmp/*' \
-        --exclude 'run/*' \
-        --exclude 'mnt/*' \
-        --exclude 'media/*' \
-        --exclude 'lost+found' \
-        ::'{hostname}-{now}' \
-        . 2>&1 | tee -a "${LOG_FILE}"
+    # Attempt backup (with lock handling)
+    local backup_attempts=0
+    local max_attempts=2
+    backup_exit=2  # Initialize with lock error code
     
-    backup_exit=${PIPESTATUS[0]}
+    while [ ${backup_attempts} -lt ${max_attempts} ] && [ ${backup_exit} -eq 2 ]; do
+        if [ ${backup_attempts} -gt 0 ]; then
+            info "Retrying backup after lock resolution..."
+        fi
+        
+        borg create \
+            --verbose \
+            ${PROGRESS_OPT} \
+            --stats \
+            --show-rc \
+            --exclude-caches \
+            --compression lz4 \
+            --one-file-system \
+            --exclude 'backup/snapshots/*' \
+            --exclude 'backup/log/*' \
+            --exclude 'home/*/.cache/*' \
+            --exclude 'var/cache/*' \
+            --exclude 'var/tmp/*' \
+            --exclude 'dev/*' \
+            --exclude 'proc/*' \
+            --exclude 'sys/*' \
+            --exclude 'tmp/*' \
+            --exclude 'run/*' \
+            --exclude 'mnt/*' \
+            --exclude 'media/*' \
+            --exclude 'lost+found' \
+            ::'{hostname}-{now}' \
+            . 2>&1 | tee -a "${LOG_FILE}"
+        
+        backup_exit=${PIPESTATUS[0]}
+        backup_attempts=$((backup_attempts + 1))
+        
+        # If lock error and not on last attempt, try to handle it
+        if [ ${backup_exit} -eq 2 ] && [ ${backup_attempts} -lt ${max_attempts} ]; then
+            if ! handle_borg_lock "backup"; then
+                # User declined or error breaking lock, don't retry
+                break
+            fi
+        fi
+    done
     
     if [ ${backup_exit} -eq 0 ]; then
         success "Borg backup completed successfully"
@@ -227,16 +323,36 @@ main() {
     info "Starting repository pruning..."
     info "========================================="
     
-    borg prune \
-        ${PROGRESS_OPT} \
-        --list \
-        --glob-archives '{hostname}-*' \
-        --show-rc \
-        --keep-daily 7 \
-        --keep-weekly 4 \
-        --keep-monthly 6 2>&1 | tee -a "${LOG_FILE}"
+    # Attempt prune (with lock handling)
+    local prune_attempts=0
+    local max_prune_attempts=2
+    prune_exit=2  # Initialize with lock error code
     
-    prune_exit=${PIPESTATUS[0]}
+    while [ ${prune_attempts} -lt ${max_prune_attempts} ] && [ ${prune_exit} -eq 2 ]; do
+        if [ ${prune_attempts} -gt 0 ]; then
+            info "Retrying prune after lock resolution..."
+        fi
+        
+        borg prune \
+            ${PROGRESS_OPT} \
+            --list \
+            --glob-archives '{hostname}-*' \
+            --show-rc \
+            --keep-daily 7 \
+            --keep-weekly 4 \
+            --keep-monthly 6 2>&1 | tee -a "${LOG_FILE}"
+        
+        prune_exit=${PIPESTATUS[0]}
+        prune_attempts=$((prune_attempts + 1))
+        
+        # If lock error and not on last attempt, try to handle it
+        if [ ${prune_exit} -eq 2 ] && [ ${prune_attempts} -lt ${max_prune_attempts} ]; then
+            if ! handle_borg_lock "prune"; then
+                # User declined or error breaking lock, don't retry
+                break
+            fi
+        fi
+    done
     
     if [ ${prune_exit} -eq 0 ]; then
         success "Repository pruning completed successfully"
