@@ -11,7 +11,10 @@ BACKUP_STORAGE_TYPE="${BACKUP_STORAGE_TYPE:-s3}"
 BACKUP_MOUNT="/mnt/backup"
 
 # Construct BORG_REPO from relative path (hides /mnt/backup from user config)
-export BORG_REPO="${BACKUP_MOUNT}/${BORG_REPO_PATH:-borgbackup}"
+# Strip leading slash from BORG_REPO_PATH to prevent absolute paths
+BORG_REPO_PATH_CLEAN="${BORG_REPO_PATH:-borgbackup}"
+BORG_REPO_PATH_CLEAN="${BORG_REPO_PATH_CLEAN#/}"  # Remove leading slash if present
+export BORG_REPO="${BACKUP_MOUNT}/${BORG_REPO_PATH_CLEAN}"
 
 # Create mount directory
 mkdir -p /mnt/backup
@@ -56,6 +59,15 @@ setup_s3_backend() {
         log_error "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables are required for S3 backend"
         exit 1
     fi
+
+    # Check network connectivity to AWS S3
+    log_info "Checking network connectivity to AWS S3..."
+    if ! curl -s -m 10 -I "https://s3.${AWS_DEFAULT_REGION}.amazonaws.com" >/dev/null 2>&1; then
+        log_error "Cannot reach AWS S3 endpoint: https://s3.${AWS_DEFAULT_REGION}.amazonaws.com"
+        log_error "Please check your network connection and AWS region setting"
+        exit 1
+    fi
+    log_success "Network connectivity to AWS S3 confirmed"
 
     # Create AWS credentials file for s3fs
     echo "${S3_BUCKET_NAME}:${AWS_ACCESS_KEY_ID}:${AWS_SECRET_ACCESS_KEY}" > /etc/passwd-s3fs
@@ -127,7 +139,6 @@ setup_s3_backend() {
     # Check if s3fs is still running
     if kill -0 $S3FS_PID 2>/dev/null; then
         log_debug "s3fs process is running (PID: $S3FS_PID)"
-        kill -CONT $S3FS_PID 2>/dev/null
     else
         log_error "s3fs process died during initialization"
         if [ "$LOGGING" = "DEBUG" ] && [ -f /tmp/s3fs_debug.log ]; then
@@ -429,6 +440,13 @@ setup_storage_backend() {
     echo "========================================="
     echo "Storage Type: ${BACKUP_STORAGE_TYPE}"
     echo ""
+
+    # Validate BORG_PASSPHRASE is set
+    if [ -z "${BORG_PASSPHRASE}" ]; then
+        log_error "BORG_PASSPHRASE environment variable is required but not set"
+        log_error "Please set BORG_PASSPHRASE in your .env file"
+        exit 1
+    fi
 
     case "$BACKUP_STORAGE_TYPE" in
         s3)
