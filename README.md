@@ -2,26 +2,45 @@
 
 A containerized solution for running BorgBackup operations with support for multiple storage backends: AWS S3, USB devices, and local storage. This Docker container provides a secure, isolated environment for performing backup operations.
 
-## 🎯 Key Features
+## Table of Contents
+
+- [Overview](#overview)
+- [Requirements](#requirements)
+- [Quick Start](#quick-start)
+- [Configuration](#configuration)
+  - [Environment Variables](#environment-variables)
+  - [Storage Backends](#storage-backends)
+- [Usage](#usage)
+  - [Running Backups](#running-backups)
+  - [Interactive Mode](#interactive-mode)
+  - [Common Borg Commands](#common-borg-commands)
+- [Features](#features)
+  - [Automatic Lock Handling](#automatic-lock-handling)
+  - [Real-time Progress Display](#real-time-progress-display)
+  - [Pre-backup Database Dumps](#pre-backup-database-dumps)
+  - [Retention Policy](#retention-policy)
+- [Scheduling Backups](#scheduling-backups)
+- [Troubleshooting](#troubleshooting)
+- [Security Considerations](#security-considerations)
+- [Technical Reference](#technical-reference)
+- [Resources](#resources)
+
+---
+
+## Overview
+
+### Key Features
 
 - **Containerized BorgBackup**: Run Borg backup operations in an isolated Docker environment
 - **Multiple Storage Backends**: Support for S3, USB devices, and local/NAS storage
 - **USB Auto-Detection**: Automatically detects USB devices by UUID
 - **Host Filesystem Access**: Full access to host filesystem for backing up any directory
 - **Flexible Configuration**: Environment-based configuration for easy deployment
+- **Automatic Lock Handling**: Configurable handling of stale repository locks
 - **Debug Support**: Built-in debug logging for troubleshooting
 - **Interactive & Non-interactive Modes**: Run one-off commands or interactive shell sessions
 
-## 📋 Prerequisites
-
-- Docker and Docker Compose installed on your system
-- Root/sudo access for mounting operations
-- **For S3**: AWS account with S3 access
-- **For USB**: A USB storage device formatted with a supported filesystem
-- **For Local**: A local directory or mounted network share
-- Basic understanding of [BorgBackup](https://www.borgbackup.org/)
-
-## 🏗️ Architecture
+### Architecture
 
 The container provides two main mount points:
 - `/mnt/backup`: Your backup storage (S3 bucket, USB device, or local path)
@@ -29,7 +48,27 @@ The container provides two main mount points:
 
 This allows Borg to read files from your host system and store encrypted backups to your chosen storage backend.
 
-## 🚀 Quick Start
+---
+
+## Requirements
+
+### General Requirements
+
+- Docker and Docker Compose installed on your system
+- Root/sudo access for mounting operations
+- Basic understanding of [BorgBackup](https://www.borgbackup.org/)
+
+### Backend-Specific Requirements
+
+| Backend | Requirements |
+|---------|-------------|
+| S3 | AWS account with S3 access, IAM credentials |
+| USB | USB storage device formatted with a supported filesystem |
+| Local | A local directory or mounted network share |
+
+---
+
+## Quick Start
 
 ### Step 1: Clone the Repository
 
@@ -65,17 +104,41 @@ sudo docker compose run --rm borgbackup borg init --encryption=repokey
 
 ---
 
-## 📦 Storage Backend Configuration
+## Configuration
 
-### Backend 1: AWS S3 (Default)
+### Environment Variables
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| **Common** |
+| `BACKUP_STORAGE_TYPE` | Storage backend: `s3`, `usb`, or `local` | `s3` | No |
+| `BORG_REPO_PATH` | Repository path relative to storage mount (supports subdirs like `server1/backups`) | `borgbackup` | No |
+| `BORG_PASSPHRASE` | Encryption passphrase | - | Yes |
+| `LOGGING` | Logging verbosity: `INFO` or `DEBUG` | `INFO` | No |
+| `SHOW_PROGRESS` | Show real-time progress during backup: `true` or `false` | `false` | No |
+| `BORG_AUTO_BREAK_LOCK` | Handle stale locks: `false`, `manual`, or `auto` | `false` | No |
+| **S3 Backend** |
+| `S3_BUCKET_NAME` | Name of S3 bucket | - | Yes (S3) |
+| `AWS_ACCESS_KEY_ID` | AWS access key | - | Yes (S3) |
+| `AWS_SECRET_ACCESS_KEY` | AWS secret key | - | Yes (S3) |
+| `AWS_DEFAULT_REGION` | AWS region | `us-east-1` | No |
+| **USB Backend** |
+| `USB_DEVICE_UUID` | UUID of USB device | - | Yes (USB) |
+| **Local Backend** |
+| `LOCAL_BACKUP_PATH` | Path on host to use | - | Yes (Local) |
+
+### Storage Backends
+
+#### S3 Backend
 
 Store backups in an AWS S3 bucket using s3fs FUSE mount.
 
-#### S3 Setup
+**Setup:**
 
-1. **Create S3 Bucket** in AWS Console with name like `<hostname>-backup`
+1. Create an S3 bucket in AWS Console with a name like `<hostname>-backup`
 
-2. **Create IAM User** with the following policy:
+2. Create an IAM user with the following policy:
+
 ```json
 {
     "Version": "2012-10-17",
@@ -94,7 +157,8 @@ Store backups in an AWS S3 bucket using s3fs FUSE mount.
 }
 ```
 
-3. **Configure `.env`**:
+3. Configure `.env`:
+
 ```bash
 BACKUP_STORAGE_TYPE=s3
 S3_BUCKET_NAME=your-hostname-backup
@@ -106,29 +170,25 @@ BORG_REPO_PATH=borgbackup
 BORG_PASSPHRASE=your-secure-passphrase
 ```
 
-4. **Run backup**:
-```bash
-sudo docker compose run --rm borgbackup /usr/sbin/backup.sh
-```
-
----
-
-### Backend 2: USB Device
+#### USB Backend
 
 Store backups on a USB-connected storage device, auto-detected by UUID.
 
-#### USB Setup
+**Setup:**
 
-1. **Connect your USB device** and find its UUID:
+1. Connect your USB device and find its UUID:
+
 ```bash
 sudo blkid
 ```
+
 Example output:
 ```
 /dev/sdb1: UUID="1234-5678-90AB-CDEF" TYPE="ext4" PARTUUID="..."
 ```
 
-2. **Configure `.env`**:
+2. Configure `.env`:
+
 ```bash
 BACKUP_STORAGE_TYPE=usb
 USB_DEVICE_UUID=1234-5678-90AB-CDEF
@@ -137,31 +197,25 @@ BORG_REPO_PATH=borgbackup
 BORG_PASSPHRASE=your-secure-passphrase
 ```
 
-3. **Run backup**:
-```bash
-sudo docker compose run --rm borgbackup /usr/sbin/backup.sh
-```
-
-#### Supported USB Filesystems
+**Supported Filesystems:**
 - ext4, ext3, ext2 (recommended)
 - xfs, btrfs
 - ntfs (using ntfs-3g)
 - vfat/FAT32 (not recommended for large backups)
 
-#### USB Tips
+**Tips:**
 - Use a dedicated USB drive for backups
 - Format with ext4 for best performance and reliability
 - Label your drive for easy identification: `sudo e2label /dev/sdb1 "BACKUP"`
 
----
-
-### Backend 3: Local/NAS Storage
+#### Local Backend
 
 Store backups on a local directory, network share, or any pre-mounted path.
 
-#### Local Setup
+**Setup:**
 
-1. **Create or identify your backup directory**:
+1. Create or identify your backup directory:
+
 ```bash
 # Local directory
 sudo mkdir -p /mnt/backup-storage
@@ -170,7 +224,8 @@ sudo mkdir -p /mnt/backup-storage
 # sudo mount -t nfs nas.local:/backups /mnt/backup-storage
 ```
 
-2. **Configure `.env`**:
+2. Configure `.env`:
+
 ```bash
 BACKUP_STORAGE_TYPE=local
 LOCAL_BACKUP_PATH=/mnt/backup-storage
@@ -179,12 +234,7 @@ BORG_REPO_PATH=borgbackup
 BORG_PASSPHRASE=your-secure-passphrase
 ```
 
-3. **Run backup**:
-```bash
-sudo docker compose run --rm borgbackup /usr/sbin/backup.sh
-```
-
-#### Local Storage Use Cases
+**Use Cases:**
 - NAS/NFS shares
 - CIFS/SMB network shares
 - iSCSI volumes
@@ -193,25 +243,9 @@ sudo docker compose run --rm borgbackup /usr/sbin/backup.sh
 
 ---
 
-## 📖 Usage Guide
+## Usage
 
-### Interactive Mode
-
-For manual backup operations and exploration:
-
-```bash
-# All backends (S3, USB, or Local)
-sudo docker compose run --rm borgbackup bash
-```
-
-Once inside the container:
-- Backup storage is available at: `/mnt/backup`
-- Host filesystem is available at: `/mnt/target`
-- Borg environment variables are pre-configured
-
-### Automated Backup Script
-
-The container includes a pre-configured backup script:
+### Running Backups
 
 ```bash
 # Using the wrapper script (recommended)
@@ -221,13 +255,26 @@ The container includes a pre-configured backup script:
 sudo docker compose run --rm borgbackup /usr/sbin/backup.sh
 ```
 
-The script performs:
+The backup script performs:
 1. Pre-backup dumps (databases, critical directories)
 2. Mailcow backup (if detected)
 3. Full system backup with intelligent exclusions
 4. Repository pruning (7 daily, 4 weekly, 6 monthly)
 
-### Common Borg Operations
+### Interactive Mode
+
+For manual backup operations and exploration:
+
+```bash
+sudo docker compose run --rm borgbackup bash
+```
+
+Once inside the container:
+- Backup storage is available at: `/mnt/backup`
+- Host filesystem is available at: `/mnt/target`
+- Borg environment variables are pre-configured
+
+### Common Borg Commands
 
 ```bash
 # Initialize repository (first time only)
@@ -238,7 +285,7 @@ sudo docker compose run --rm borgbackup borg list
 
 # List contents of a specific archive (with path filter)
 sudo docker compose run --rm borgbackup \
-    borg list ::f4a8739ae326-2025-12-25T13:03:43 /home/rodo
+    borg list ::archive-name /home/user
 
 # Create manual backup
 sudo docker compose run --rm borgbackup \
@@ -258,131 +305,64 @@ sudo docker compose run --rm borgbackup \
 
 ---
 
-## ⚙️ Configuration Reference
+## Features
 
-### Environment Variables
+### Automatic Lock Handling
 
-| Variable | Description | Default | Required |
-|----------|-------------|---------|----------|
-| **Common** |
-| `BACKUP_STORAGE_TYPE` | Storage backend: `s3`, `usb`, or `local` | `s3` | No |
-| `BORG_REPO_PATH` | Repository path relative to storage mount (supports subdirs like `server1/backups`) | `borgbackup` | No |
-| `BORG_PASSPHRASE` | Encryption passphrase | - | Yes |
-| `LOGGING` | Logging verbosity: `INFO` or `DEBUG` | `INFO` | No |
-| `SHOW_PROGRESS` | Show real-time progress during backup: `true` or `false` | `false` | No |
-| **S3 Backend** |
-| `S3_BUCKET_NAME` | Name of S3 bucket | - | Yes (S3) |
-| `AWS_ACCESS_KEY_ID` | AWS access key | - | Yes (S3) |
-| `AWS_SECRET_ACCESS_KEY` | AWS secret key | - | Yes (S3) |
-| `AWS_DEFAULT_REGION` | AWS region | `us-east-1` | No |
-| **USB Backend** |
-| `USB_DEVICE_UUID` | UUID of USB device | - | Yes (USB) |
-| **Local Backend** |
-| `LOCAL_BACKUP_PATH` | Path on host to use | - | Yes (Local) |
+BorgBackup uses exclusive locks to prevent concurrent repository access. If a backup is interrupted (container killed, system crash, etc.), a stale lock file may remain.
+
+Configure `BORG_AUTO_BREAK_LOCK` in your `.env` file to handle this automatically:
+
+| Value | Behavior |
+|-------|----------|
+| `false` | Do nothing, fail immediately on lock error (default, safest) |
+| `manual` | Prompt user to confirm breaking the lock (for interactive use) |
+| `auto` | Wait 60 seconds, then automatically break the lock (for cron jobs) |
+
+Example configuration:
+```bash
+BORG_AUTO_BREAK_LOCK=manual  # or "auto" for unattended backups
+```
+
+With `manual` mode, the script will ask for confirmation before breaking the lock. With `auto` mode, it waits 60 seconds and automatically breaks the lock if it persists.
+
+After breaking a lock, the script automatically verifies repository integrity before proceeding.
+
+### Real-time Progress Display
+
+Enable progress output during backup operations by setting:
+
+```bash
+SHOW_PROGRESS=true
+```
+
+This displays:
+- Original size
+- Compressed size
+- Deduplicated size
+- Files processed
+
+### Pre-backup Database Dumps
+
+The backup script automatically detects and performs dumps for:
+
+- **Mailcow**: If detected at `/srv/mailcow`, runs the official backup script
+
+Dumps are stored at `/backup/dump` on the host and included in the Borg archive.
+
+### Retention Policy
+
+The automated backup script applies the following retention policy:
+
+| Period | Retention |
+|--------|-----------|
+| Daily | 7 backups |
+| Weekly | 4 backups |
+| Monthly | 6 backups |
 
 ---
 
-## 🔧 Troubleshooting
-
-### Enable Debug Mode
-
-Set `LOGGING=DEBUG` in your `.env` file for verbose output:
-
-```bash
-LOGGING=DEBUG
-```
-
-### Common Issues
-
-#### S3: Mount Fails
-- Verify AWS credentials are correct
-- Check IAM policy permissions
-- Ensure bucket name and region match
-- Test network connectivity to AWS
-
-#### USB: Device Not Found
-```bash
-# List all block devices
-sudo blkid
-
-# Check if device is connected
-lsblk
-
-# Verify UUID matches .env configuration
-```
-
-#### USB: Mount Fails
-- Ensure filesystem is supported (ext4 recommended)
-- Check for filesystem errors: `sudo fsck /dev/sdb1`
-- Verify device is not already mounted on host
-
-#### Local: Permission Denied
-- Ensure directory exists and is writable
-- Check ownership: `sudo chown -R root:root /mnt/backup-storage`
-- Verify NAS/network share is properly mounted
-
-#### Borg: Stale Lock Error
-
-**Error:**
-```
-Failed to create/acquire the lock /mnt/backup/.../borgbackup/lock.exclusive (timeout).
-terminating with error status, rc 2
-```
-
-**Cause:** A previous backup was interrupted (container killed, system crash, etc.) and left a lock file behind. BorgBackup uses exclusive locks to prevent concurrent repository access.
-
-**Solution 1: Manual Lock Break**
-```bash
-# Start interactive shell
-sudo docker compose run --rm borgbackup bash
-
-# Break the lock
-borg break-lock /mnt/backup/backup-<hostname>/borgbackup
-
-# Exit and retry backup
-exit
-./run-backup.sh
-```
-
-**Solution 2: Automatic Lock Handling**
-
-Configure `BORG_AUTO_BREAK_LOCK` in your `.env` file:
-
-```bash
-# Options:
-# - false: Do nothing, fail immediately (default)
-# - manual: Prompt user to confirm breaking lock
-# - auto: Automatically break lock after 60 second timeout
-
-BORG_AUTO_BREAK_LOCK=manual  # or "auto"
-```
-
-With `manual` mode, the script will ask for confirmation before breaking the lock. With `auto` mode, it will wait 60 seconds and automatically break the lock if it persists.
-
-#### General: Backup Performance
-- Use compression: `--compression lz4` (already enabled)
-- Exclude unnecessary files with `--exclude` patterns
-- For USB: Use USB 3.0 ports and devices
-- For S3: Consider AWS region closest to your server
-
----
-
-## 🔒 Security Considerations
-
-### Credential Management
-- Never commit `.env` to version control
-- Use strong, unique `BORG_PASSPHRASE` (store securely!)
-- Rotate AWS access keys regularly
-- For USB: Consider filesystem encryption (LUKS)
-
-### Borg Encryption
-- Always use encryption when initializing repositories
-- Store repository key in multiple secure locations
-- Test restore procedures regularly
-
----
-
-## 📚 Advanced Usage
+## Scheduling Backups
 
 ### Automated Backups with Cron
 
@@ -393,6 +373,8 @@ sudo crontab -e
 # Add daily backup at 2 AM
 0 2 * * * cd /path/to/borgbackup && ./run-backup.sh >> /var/log/borgbackup-cron.log 2>&1
 ```
+
+For unattended cron backups, set `BORG_AUTO_BREAK_LOCK=auto` to handle stale locks automatically.
 
 ### Multiple Storage Backends
 
@@ -406,39 +388,122 @@ sudo docker compose --env-file .env.s3 run --rm borgbackup borg list
 sudo docker compose --env-file .env.usb run --rm borgbackup borg list
 ```
 
-### Backup Verification
+---
+
+## Troubleshooting
+
+### Enable Debug Mode
+
+Set `LOGGING=DEBUG` in your `.env` file for verbose output:
 
 ```bash
-# Check repository consistency
-sudo docker compose run --rm borgbackup borg check
-
-# Verify specific archive
-sudo docker compose run --rm borgbackup borg check ::archive-name
-
-# List archive contents
-sudo docker compose run --rm borgbackup borg list ::archive-name
+LOGGING=DEBUG
 ```
 
+### Common Issues
+
+**S3: Mount Fails**
+- Verify AWS credentials are correct
+- Check IAM policy permissions
+- Ensure bucket name and region match
+- Test network connectivity to AWS
+
+**USB: Device Not Found**
+```bash
+# List all block devices
+sudo blkid
+
+# Check if device is connected
+lsblk
+
+# Verify UUID matches .env configuration
+```
+
+**USB: Mount Fails**
+- Ensure filesystem is supported (ext4 recommended)
+- Check for filesystem errors: `sudo fsck /dev/sdb1`
+- Verify device is not already mounted on host
+
+**Local: Permission Denied**
+- Ensure directory exists and is writable
+- Check ownership: `sudo chown -R root:root /mnt/backup-storage`
+- Verify NAS/network share is properly mounted
+
+**Borg: Stale Lock Error**
+
+If you see:
+```
+Failed to create/acquire the lock /mnt/backup/.../borgbackup/lock.exclusive (timeout).
+```
+
+See [Automatic Lock Handling](#automatic-lock-handling) or manually break the lock:
+```bash
+sudo docker compose run --rm borgbackup bash
+borg break-lock /mnt/backup/borgbackup
+exit
+```
+
+**General: Backup Performance**
+- Use compression: `--compression lz4` (already enabled)
+- Exclude unnecessary files with `--exclude` patterns
+- For USB: Use USB 3.0 ports and devices
+- For S3: Consider AWS region closest to your server
+
 ---
 
-## 🗺️ Future Enhancements
+## Security Considerations
 
-- **SSH Backend**: Direct backup to remote Linux server via SSH (Borg native)
-- **Backblaze B2**: Support for Backblaze B2 cloud storage
-- **Notifications**: Email/Slack notifications on backup completion
-- **Web UI**: Simple web interface for monitoring backups
+### Credential Management
+
+- Never commit `.env` to version control
+- Use strong, unique `BORG_PASSPHRASE` (store securely)
+- Rotate AWS access keys regularly
+- For USB: Consider filesystem encryption (LUKS)
+
+### Borg Encryption
+
+- Always use encryption when initializing repositories
+- Store repository key in multiple secure locations
+- Test restore procedures regularly
 
 ---
 
-## 🤝 Contributing
+## Technical Reference
 
-Contributions are welcome! Please feel free to submit issues or pull requests.
+### Software Versions
 
-## 📄 License
+| Component | Version |
+|-----------|---------|
+| Base Image | python:3.13.7-slim-trixie |
+| BorgBackup | 1.4.1 |
+| s3fs | 1.95-1 |
 
-[Specify your license here]
+### Container Capabilities
 
-## 🔗 Resources
+The container requires the following capabilities for proper operation:
+- `SYS_ADMIN`: Required for FUSE mounts (S3, USB)
+- Access to `/dev` for USB device detection
+
+### Volume Mounts
+
+| Container Path | Purpose |
+|---------------|---------|
+| `/mnt/backup` | Backup storage mount point |
+| `/mnt/target` | Host filesystem (read-only recommended) |
+| `/dev` | Device access for USB detection |
+
+### Supported USB Filesystems
+
+| Filesystem | Mount Options |
+|------------|---------------|
+| ext4, ext3, ext2 | `rw` |
+| xfs, btrfs | `rw` |
+| ntfs | `rw,uid=0,gid=0` |
+| vfat | `rw,uid=0,gid=0,umask=002` |
+
+---
+
+## Resources
 
 - [BorgBackup Documentation](https://borgbackup.readthedocs.io/)
 - [AWS S3 Documentation](https://docs.aws.amazon.com/s3/)
