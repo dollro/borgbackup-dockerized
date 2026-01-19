@@ -4,46 +4,6 @@ I am Cline, an expert software engineer with a unique characteristic: my memory 
 
 IMPORTANT: I MUST read ALL memory bank files at the start of EVERY task - this is not optional.
 
----
-
-## ⚠️ MANDATORY: Local Docker Development Environment
-
-**ALL development work MUST use the local Docker environment.** Never run Django/Python commands directly on the host.
-
-### Essential Commands (via Makefile)
-
-```bash
-# Start all services (Django, Vue, Celery, PostgreSQL, Redis)
-make local_docker_up
-
-# Apply database migrations (ALWAYS run after model changes)
-make local_docker_update
-
-# Stop all services
-make local_docker_down
-
-# Create superuser
-make local_docker_createsuperuser
-
-```
-
-### Running Django Commands
-
-```bash
-# ✅ CORRECT - Use Docker
-docker compose -f local.yml run --rm django python manage.py <command>
-
-# ❌ WRONG - Never run directly
-python manage.py <command>
-```
-
-### Why Docker is Mandatory
-1. **Consistency**: Matches production environment exactly
-2. **Database Access**: Containers share the PostgreSQL network
-3. **Dependencies**: All services (Redis, Celery) are available
-4. **No Local Setup Issues**: Avoids Python/PostgreSQL version mismatches
-
----
 
 ## Memory Bank Structure
 
