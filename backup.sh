@@ -301,6 +301,15 @@ main() {
         PROGRESS_OPT="--progress"
         info "Progress display enabled"
     fi
+
+    # Build dynamic exclusion for local backup path (prevent recursive backups)
+    LOCAL_PATH_EXCLUDE=()
+    if [ "${BACKUP_STORAGE_TYPE}" = "local" ] && [ -n "${LOCAL_BACKUP_PATH}" ]; then
+        # Convert absolute path to relative (strip leading slash)
+        LOCAL_PATH_RELATIVE="${LOCAL_BACKUP_PATH#/}"
+        LOCAL_PATH_EXCLUDE=(--exclude "${LOCAL_PATH_RELATIVE}" --exclude "${LOCAL_PATH_RELATIVE}/*")
+        info "Excluding local backup path from backup: ${LOCAL_PATH_RELATIVE}"
+    fi
     
     # Attempt backup (with lock handling)
     local backup_attempts=0
@@ -333,6 +342,7 @@ main() {
             --exclude 'mnt/*' \
             --exclude 'media/*' \
             --exclude 'lost+found' \
+            "${LOCAL_PATH_EXCLUDE[@]}" \
             ::'{hostname}-{now}' \
             . 2>&1 | tee -a "${LOG_FILE}"
         
