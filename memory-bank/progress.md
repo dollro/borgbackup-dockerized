@@ -12,6 +12,7 @@ The backup solution is complete with support for multiple storage backends: AWS 
 | Docker Container | ✅ Complete | Python 3.13.7 slim with all dependencies |
 | **Multi-Backend Storage** | ✅ Complete | S3, USB, and Local storage support |
 | **Automatic Lock Handling** | ✅ Complete | Three modes: false/manual/auto for stale locks |
+| **Real-time Progress Display** | ✅ Complete | SHOW_PROGRESS env var for live backup monitoring |
 | S3 Integration | ✅ Complete | s3fs-fuse mounts S3 bucket as filesystem |
 | USB Integration | ✅ Complete | Auto-detect by UUID, multiple filesystems |
 | Local/NAS Integration | ✅ Complete | Bind mount for any host path |

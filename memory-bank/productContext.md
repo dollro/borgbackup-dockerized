@@ -20,26 +20,35 @@ By mounting S3 as a FUSE filesystem via s3fs, BorgBackup can use S3 directly as 
 
 ## How It Should Work
 
-### User Workflow
+### User Workflow - Multi-Backend Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      Host Server                            │
-│                                                             │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │              Docker Container                        │   │
-│  │                                                      │   │
-│  │  /mnt/target ◄──── Host filesystem (read-only)      │   │
-│  │                                                      │   │
-│  │  /mnt/backup ◄──── S3 bucket (via s3fs)             │   │
-│  │       │                                              │   │
-│  │       └── /borgbackup ◄── Borg repository           │   │
-│  │                                                      │   │
-│  │  BorgBackup reads from /mnt/target                  │   │
-│  │  BorgBackup writes to /mnt/backup/borgbackup        │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                      Host Server                                │
+│                                                                 │
+│  ┌───────────────────────────────────────────────────────────┐ │
+│  │              Docker Container                              │ │
+│  │                                                            │ │
+│  │  /mnt/target ◄──── Host filesystem (read-only)            │ │
+│  │                                                            │ │
+│  │  /mnt/backup ◄──── Storage Backend (selectable):          │ │
+│  │       │             • S3 bucket (via s3fs)                │ │
+│  │       │             • USB device (UUID auto-detected)      │ │
+│  │       │             • Local/NAS path (bind mount)          │ │
+│  │       │                                                    │ │
+│  │       └── /borgbackup ◄── Borg repository                 │ │
+│  │                                                            │ │
+│  │  BorgBackup reads from /mnt/target                        │ │
+│  │  BorgBackup writes to /mnt/backup/borgbackup              │ │
+│  └───────────────────────────────────────────────────────────┘ │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+         │                    │                    │
+         ▼                    ▼                    ▼
+    ┌─────────┐         ┌─────────┐         ┌─────────┐
+    │  AWS S3 │         │   USB   │         │ Local/  │
+    │ (cloud) │         │  Drive  │         │   NAS   │
+    └─────────┘         └─────────┘         └─────────┘
 ```
 
 ### Usage Modes

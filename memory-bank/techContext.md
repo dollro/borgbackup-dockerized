@@ -108,6 +108,8 @@ llfuse
 | `BORG_REPO_PATH` | Repository path relative to storage mount | `borgbackup` or `server1/backups` |
 | `BORG_PASSPHRASE` | Encryption passphrase | `secure-passphrase` |
 | `LOGGING` | Log verbosity | `INFO` or `DEBUG` |
+| `SHOW_PROGRESS` | Show real-time progress during backup | `true` or `false` (default: `false`) |
+| `BORG_AUTO_BREAK_LOCK` | Handle stale locks | `false` (default), `manual`, or `auto` |
 
 ### S3 Backend Variables
 

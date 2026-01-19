@@ -6,7 +6,7 @@ The project is in a **stable, production-ready state** with **multi-backend stor
 
 ## Recent Changes
 
-Latest implementation (December 2025):
+Latest implementation (January 2026):
 
 ### Lock Handling Feature (Dec 31, 2025)
 - ✅ **Automatic Lock Handling** implemented
@@ -17,6 +17,13 @@ Latest implementation (December 2025):
 - ✅ Updated README with stale lock troubleshooting section
 - ✅ Updated `.env.example` with new configuration option
 - ✅ Enhanced `backup.sh` with lock detection and break-lock logic
+
+### Real-time Progress Display
+- ✅ **SHOW_PROGRESS Feature** implemented
+  - New `SHOW_PROGRESS` environment variable
+  - Displays real-time backup progress (original size, compressed size, deduplicated size, files processed)
+  - Useful for monitoring long-running backups
+  - Default: `false` (can be enabled with `SHOW_PROGRESS=true`)
 
 ### Multi-Backend Storage Support
 - ✅ **Multi-Backend Storage Support** implemented

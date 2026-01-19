@@ -37,7 +37,7 @@ A containerized solution for running BorgBackup operations with AWS S3 as the ba
 ### Out of Scope
 - GUI/Web interface
 - Backup restoration automation (manual via borg commands)
-- Multi-cloud support (S3-only)
+- Additional cloud providers beyond S3 (Azure, GCP, etc.)
 
 ## Success Criteria
 
