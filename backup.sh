@@ -5,13 +5,14 @@
 # The host filesystem is mounted at /mnt/target
 # The backup storage is mounted at /mnt/backup (S3, USB, or local)
 
+set -e
 set -o pipefail
 
 # Configuration
 BACKUP_STORAGE_TYPE="${BACKUP_STORAGE_TYPE:-s3}"
 SHOW_PROGRESS="${SHOW_PROGRESS:-false}"
 BORG_AUTO_BREAK_LOCK="${BORG_AUTO_BREAK_LOCK:-false}"
-LOG_DIR="/target/backup/log"
+LOG_DIR="/mnt/target/backup/log"
 LOG_FILE="${LOG_DIR}/backup-$(date +%Y%m%d-%H%M%S).log"
 DUMP_BASE_DIR="/mnt/target/backup/dump"
 DUMP_DIR="${DUMP_BASE_DIR}"
@@ -71,7 +72,14 @@ perform_dumps_mailcow() {
 # Main function to orchestrate pre-backup dumps
 perform_dumps() {
     info "Starting pre-backup dumps..."
-    
+
+    # Validate DUMP_DIR for safety
+    if [ -z "${DUMP_DIR}" ] || [ "${DUMP_DIR}" = "/" ] || [ "${DUMP_DIR}" = "/mnt/target" ]; then
+        error "Invalid or dangerous DUMP_DIR value: '${DUMP_DIR}'"
+        error "DUMP_DIR must be a subdirectory path, not empty or root"
+        exit 1
+    fi
+
     # Clean and create dump directory
     if [ -d "${DUMP_DIR}" ]; then
         info "Removing old dump directory..."
@@ -137,7 +145,17 @@ verify_storage_backend() {
         return 1
     fi
     rm -f /mnt/backup/.backup_test
-    
+
+    # Check available disk space (warn if less than 5GB available)
+    local available_space=$(df -BG /mnt/backup | tail -1 | awk '{print $4}' | sed 's/G//')
+    info "Available space on backup storage: ${available_space}GB"
+
+    if [ "$available_space" -lt 5 ]; then
+        error "WARNING: Less than 5GB available on backup storage!"
+        error "Available: ${available_space}GB - Consider freeing up space or pruning old backups"
+        # Don't exit, just warn - let user decide if they want to continue
+    fi
+
     success "Storage backend '${BACKUP_STORAGE_TYPE}' is accessible"
     return 0
 }
@@ -181,8 +199,18 @@ handle_borg_lock() {
                 info "User confirmed: Breaking lock..."
                 borg break-lock "${BORG_REPO}" 2>&1 | tee -a "${LOG_FILE}"
                 if [ ${PIPESTATUS[0]} -eq 0 ]; then
-                    success "Lock broken successfully, retrying ${operation}..."
-                    return 0  # Retry
+                    success "Lock broken successfully"
+
+                    # Verify repository integrity after breaking lock
+                    info "Verifying repository integrity..."
+                    if borg check --repository-only "${BORG_REPO}" 2>&1 | tee -a "${LOG_FILE}"; then
+                        success "Repository integrity verified, retrying ${operation}..."
+                        return 0  # Retry
+                    else
+                        error "Repository integrity check failed after breaking lock!"
+                        error "Manual intervention required. Run: borg check ${BORG_REPO}"
+                        return 1  # Do not retry
+                    fi
                 else
                     error "Failed to break lock"
                     return 1  # Do not retry
@@ -213,8 +241,18 @@ handle_borg_lock() {
             info "Timeout reached: Breaking lock automatically..."
             borg break-lock "${BORG_REPO}" 2>&1 | tee -a "${LOG_FILE}"
             if [ ${PIPESTATUS[0]} -eq 0 ]; then
-                success "Lock broken successfully, retrying ${operation}..."
-                return 0  # Retry
+                success "Lock broken successfully"
+
+                # Verify repository integrity after breaking lock
+                info "Verifying repository integrity..."
+                if borg check --repository-only "${BORG_REPO}" 2>&1 | tee -a "${LOG_FILE}"; then
+                    success "Repository integrity verified, retrying ${operation}..."
+                    return 0  # Retry
+                else
+                    error "Repository integrity check failed after breaking lock!"
+                    error "Manual intervention required. Run: borg check ${BORG_REPO}"
+                    return 1  # Do not retry
+                fi
             else
                 error "Failed to break lock"
                 return 1  # Do not retry
