@@ -46,7 +46,8 @@ services:
       - /etc/group:/etc/group:ro
       
       # Local backup destination (bind mount from host)
-      # Used when BACKUP_STORAGE_TYPE=local, ignored for S3/USB (overwritten by FUSE/device mount)
-      - ${LOCAL_BACKUP_PATH:-/tmp/backup}:/mnt/backup
+      # For BACKUP_STORAGE_TYPE=local: set LOCAL_BACKUP_PATH in .env (required)
+      # For S3/USB: this mount is overwritten by FUSE/device mount in entrypoint
+      - ${LOCAL_BACKUP_PATH:-/mnt/backup-unused}:/mnt/backup
     cap_add:
       - SYS_ADMIN
