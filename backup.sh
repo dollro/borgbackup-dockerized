@@ -18,19 +18,18 @@ LOG_FILE="${LOG_DIR}/backup-$(date +%Y%m%d-%H%M%S).log"
 DUMP_BASE_DIR="/mnt/target/backup/dump"
 DUMP_DIR="${DUMP_BASE_DIR}"
 
+# Ensure log directory exists
+mkdir -p "${LOG_DIR}"
+
 # Cleanup handler for interruptions and failures
 cleanup_on_exit() {
     local exit_code=$?
     if [ -d "${DUMP_DIR}" ] && [ "${DUMP_DIR}" != "/" ] && [ "${DUMP_DIR}" != "/mnt/target" ]; then
-        info "Cleaning up dump directory: ${DUMP_DIR}" 2>/dev/null || true
-        rm -rf "${DUMP_DIR}"
+        rm -rf "${DUMP_DIR}" 2>/dev/null || true
     fi
     exit ${exit_code}
 }
 trap cleanup_on_exit EXIT
-
-# Ensure log directory exists
-mkdir -p "${LOG_DIR}"
 
 # Logging functions
 log() {
@@ -292,6 +291,10 @@ main() {
     fi
     if [ -z "${BORG_PASSPHRASE}" ]; then
         error "BORG_PASSPHRASE is not set"
+        exit 1
+    fi
+    if ! [[ "${BORG_TIMEOUT}" =~ ^[0-9]+$ ]]; then
+        error "BORG_TIMEOUT must be numeric (seconds), got: ${BORG_TIMEOUT}"
         exit 1
     fi
 

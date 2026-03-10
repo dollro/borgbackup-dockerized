@@ -60,6 +60,11 @@ setup_s3_backend() {
         exit 1
     fi
 
+    if [ -z "$AWS_DEFAULT_REGION" ]; then
+        log_error "AWS_DEFAULT_REGION environment variable is required for S3 backend"
+        exit 1
+    fi
+
     # Check network connectivity to AWS S3
     log_info "Checking network connectivity to AWS S3..."
     if ! curl -s -m 10 -I "https://s3.${AWS_DEFAULT_REGION}.amazonaws.com" >/dev/null 2>&1; then
