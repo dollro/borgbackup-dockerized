@@ -41,6 +41,15 @@ if [ ! -f ".env" ]; then
     exit 1
 fi
 
+# Prevent concurrent execution (protects borg repo from corruption)
+LOCK_FILE="/tmp/borgbackup.lock"
+exec 200>"$LOCK_FILE"
+if ! flock -n 200; then
+    echo -e "${RED}Error: Another backup is already running${NC}"
+    echo "Lock file: $LOCK_FILE"
+    exit 1
+fi
+
 # Verify Docker daemon is running
 if ! docker info >/dev/null 2>&1; then
     echo -e "${RED}Error: Docker daemon is not running${NC}"
