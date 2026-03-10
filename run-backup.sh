@@ -5,11 +5,15 @@
 
 set -e
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+# Colors for output (respect NO_COLOR standard: https://no-color.org/)
+if [ -n "${NO_COLOR}" ]; then
+    RED='' GREEN='' YELLOW='' NC=''
+else
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[1;33m'
+    NC='\033[0m'
+fi
 
 echo -e "${GREEN}================================================${NC}"
 echo -e "${GREEN}Starting Dockerized BorgBackup${NC}"
