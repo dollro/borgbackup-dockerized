@@ -473,7 +473,7 @@ exit
 ### Container Hardening
 
 - The container runs with only `SYS_ADMIN` capability (required for FUSE mounts)
-- Device access is restricted to `/dev/fuse` and `/dev/disk` (read-only)
+- Device access via `/dev` (required for FUSE and USB block device mounting)
 - Memory is capped at 4GB by default (adjustable in `docker-compose.yml`)
 - A health check monitors `/mnt/backup` accessibility
 
@@ -498,10 +498,8 @@ exit
 ### Container Capabilities
 
 The container requires the following capabilities for proper operation:
-- `SYS_ADMIN`: Required for FUSE mounts (S3, USB)
-- Access to `/dev/fuse` for FUSE mounts and `/dev/disk` (read-only) for USB device detection by UUID
-
-> **Note:** For USB backend, you may also need to mount your specific block device (e.g., `/dev/sdb1:/dev/sdb1`) in `docker-compose.yml`.
+- `SYS_ADMIN`: Required for FUSE mounts (S3) and block device mounts (USB)
+- Access to `/dev` for FUSE device and USB block device detection/mounting
 
 ### Volume Mounts
 
@@ -509,8 +507,7 @@ The container requires the following capabilities for proper operation:
 |---------------|---------|
 | `/mnt/backup` | Backup storage mount point |
 | `/mnt/target` | Host filesystem |
-| `/dev/fuse` | FUSE device (required for s3fs) |
-| `/dev/disk` | Disk device info (read-only, for blkid UUID lookups) |
+| `/dev` | Device access for FUSE (S3) and block devices (USB) |
 
 ### Supported USB Filesystems
 

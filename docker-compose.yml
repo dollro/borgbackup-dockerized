@@ -36,12 +36,8 @@ services:
       # Host filesystem access for backup source
       - /:/mnt/target
       
-      # FUSE device (required for s3fs)
-      - /dev/fuse:/dev/fuse
-      # USB device detection (required for blkid UUID lookups)
-      - /dev/disk:/dev/disk:ro
-      # NOTE: For USB backend, you may also need to mount your specific
-      # block device, e.g.: /dev/sdb1:/dev/sdb1
+      # Device access for FUSE mounts (S3) and block devices (USB)
+      - /dev:/dev
       - /etc/passwd:/etc/passwd:ro
       - /etc/group:/etc/group:ro
       
