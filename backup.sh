@@ -279,7 +279,17 @@ handle_borg_lock() {
 # Main backup execution
 main() {
     local storage_desc=$(get_storage_description)
-    
+
+    # Validate required environment variables
+    if [ -z "${BORG_REPO}" ]; then
+        error "BORG_REPO is not set (should be exported by entrypoint)"
+        exit 1
+    fi
+    if [ -z "${BORG_PASSPHRASE}" ]; then
+        error "BORG_PASSPHRASE is not set"
+        exit 1
+    fi
+
     info "========================================="
     info "Starting Dockerized BorgBackup Process"
     info "========================================="
