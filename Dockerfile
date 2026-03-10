@@ -1,4 +1,4 @@
-FROM python:3.13.7-slim-trixie
+FROM python:3.13.7-slim-trixie@sha256:5f55cdf0c5d9dc1a415637a5ccc4a9e18663ad203673173b8cda8f8dcacef689
 ENV PYTHONUNBUFFERED=1
 RUN --mount=type=cache,id=apt-cache,target=/var/cache/apt apt-get update \
   # dependencies for s3fs (latest version with cache management)
