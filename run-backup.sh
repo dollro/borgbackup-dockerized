@@ -57,13 +57,6 @@ if ! docker info >/dev/null 2>&1; then
     exit 1
 fi
 
-# Verify sudo access (needed for docker compose run)
-if ! sudo -n true 2>/dev/null; then
-    echo -e "${RED}Error: Passwordless sudo required but not available${NC}"
-    echo "Configure sudoers or run as root"
-    exit 1
-fi
-
 # Rebuild the image if needed (in case backup.sh was updated)
 echo -e "${YELLOW}Building/updating Docker image...${NC}"
 if ! docker compose build --quiet; then
