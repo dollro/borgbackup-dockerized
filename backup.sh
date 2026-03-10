@@ -25,7 +25,7 @@ mkdir -p "${LOG_DIR}"
 cleanup_on_exit() {
     local exit_code=$?
     if [ -d "${DUMP_DIR}" ] && [ "${DUMP_DIR}" != "/" ] && [ "${DUMP_DIR}" != "/mnt/target" ]; then
-        rm -rf "${DUMP_DIR}" 2>/dev/null || true
+        rm -rf "${DUMP_DIR:?}"/* 2>/dev/null || true
     fi
     exit ${exit_code}
 }
@@ -91,13 +91,12 @@ perform_dumps() {
         exit 1
     fi
 
-    # Clean and create dump directory
+    # Clean dump directory contents (directory itself may be a mount point)
     if [ -d "${DUMP_DIR}" ]; then
-        info "Removing old dump directory..."
-        rm -rf "${DUMP_DIR}"
+        info "Cleaning old dump contents..."
+        rm -rf "${DUMP_DIR:?}"/* 2>/dev/null || true
     fi
-    
-    info "Creating dump directory: ${DUMP_DIR}"
+
     mkdir -p "${DUMP_DIR}"
     
     # Create timestamp file
