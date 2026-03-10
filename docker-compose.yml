@@ -33,8 +33,11 @@ services:
       # === Local Configuration (when BACKUP_STORAGE_TYPE=local) ===
       - LOCAL_BACKUP_PATH=${LOCAL_BACKUP_PATH:-}
     volumes:
-      # Host filesystem access for backup source
-      - /:/mnt/target
+      # Host filesystem (read-only backup source)
+      - /:/mnt/target:ro
+      # Writable paths for backup logs and pre-backup dumps
+      - /backup/log:/mnt/target/backup/log
+      - /backup/dump:/mnt/target/backup/dump
       
       # Device access for FUSE mounts (S3) and block devices (USB)
       - /dev:/dev
