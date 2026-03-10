@@ -132,21 +132,30 @@ setup_s3_backend() {
 
     S3FS_PID=$!
 
-    # Give s3fs time to initialize
+    # Wait for s3fs to initialize (poll instead of fixed sleep)
     log_debug "Waiting for s3fs to initialize..."
-    sleep 3
-
-    # Check if s3fs is still running
-    if kill -0 $S3FS_PID 2>/dev/null; then
-        log_debug "s3fs process is running (PID: $S3FS_PID)"
-    else
-        log_error "s3fs process died during initialization"
-        if [ "$LOGGING" = "DEBUG" ] && [ -f /tmp/s3fs_debug.log ]; then
-            echo "Last 20 lines of debug log:"
-            tail -20 /tmp/s3fs_debug.log
+    for i in $(seq 1 30); do
+        # Check if process died
+        if ! kill -0 $S3FS_PID 2>/dev/null; then
+            log_error "s3fs process died during initialization"
+            if [ "$LOGGING" = "DEBUG" ] && [ -f /tmp/s3fs_debug.log ]; then
+                echo "Last 20 lines of debug log:"
+                tail -20 /tmp/s3fs_debug.log
+            fi
+            exit 1
         fi
-        exit 1
-    fi
+        # Check if mount is ready
+        if mountpoint -q /mnt/backup 2>/dev/null; then
+            log_debug "s3fs mount detected after ${i}s (PID: $S3FS_PID)"
+            break
+        fi
+        if [ "$i" -eq 30 ]; then
+            log_error "s3fs mount timeout after 30 seconds"
+            kill $S3FS_PID 2>/dev/null
+            exit 1
+        fi
+        sleep 1
+    done
 
     # Verify mount
     verify_s3_mount
