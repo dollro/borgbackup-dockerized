@@ -5,6 +5,14 @@
 
 set -e
 
+# Cleanup on interruption
+cleanup() {
+    echo -e "\n${YELLOW}Interrupted, stopping container...${NC}"
+    sudo docker compose down --remove-orphans 2>/dev/null
+    exit 130
+}
+trap cleanup INT TERM
+
 # Colors for output (respect NO_COLOR standard: https://no-color.org/)
 if [ -n "${NO_COLOR}" ]; then
     RED='' GREEN='' YELLOW='' NC=''
@@ -33,9 +41,19 @@ if [ ! -f ".env" ]; then
     exit 1
 fi
 
+# Verify sudo access (needed for docker compose run)
+if ! sudo -n true 2>/dev/null; then
+    echo -e "${RED}Error: Passwordless sudo required but not available${NC}"
+    echo "Configure sudoers or run as root"
+    exit 1
+fi
+
 # Rebuild the image if needed (in case backup.sh was updated)
 echo -e "${YELLOW}Building/updating Docker image...${NC}"
-docker compose build
+if ! docker compose build --quiet; then
+    echo -e "${RED}Error: Docker image build failed${NC}"
+    exit 1
+fi
 
 # Run the backup
 echo -e "${GREEN}Running backup script...${NC}"
