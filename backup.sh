@@ -15,8 +15,9 @@ BORG_AUTO_BREAK_LOCK="${BORG_AUTO_BREAK_LOCK:-false}"
 BORG_TIMEOUT="${BORG_TIMEOUT:-14400}"  # 4 hours default
 LOG_DIR="/mnt/target/backup/log"
 LOG_FILE="${LOG_DIR}/backup-$(date +%Y%m%d-%H%M%S).log"
+RUN_ID="$(date +%Y%m%d-%H%M%S)-$$"
 DUMP_BASE_DIR="/mnt/target/backup/dump"
-DUMP_DIR="${DUMP_BASE_DIR}"
+DUMP_DIR="${DUMP_BASE_DIR}/${RUN_ID}"
 
 # Ensure log directory exists
 mkdir -p "${LOG_DIR}"
@@ -24,8 +25,8 @@ mkdir -p "${LOG_DIR}"
 # Cleanup handler for interruptions and failures
 cleanup_on_exit() {
     local exit_code=$?
-    if [ -d "${DUMP_DIR}" ] && [ "${DUMP_DIR}" != "/" ] && [ "${DUMP_DIR}" != "/mnt/target" ]; then
-        rm -rf "${DUMP_DIR:?}"/* 2>/dev/null || true
+    if [ -d "${DUMP_DIR}" ] && [ "${DUMP_DIR}" != "${DUMP_BASE_DIR}" ]; then
+        rm -rf "${DUMP_DIR}" 2>/dev/null || true
     fi
     exit ${exit_code}
 }
@@ -91,12 +92,12 @@ perform_dumps() {
         exit 1
     fi
 
-    # Clean dump directory contents (directory itself may be a mount point)
-    if [ -d "${DUMP_DIR}" ]; then
-        info "Cleaning old dump contents..."
-        rm -rf "${DUMP_DIR:?}"/* 2>/dev/null || true
+    # Clean up leftover dump dirs from previous failed runs
+    if [ -d "${DUMP_BASE_DIR}" ]; then
+        find "${DUMP_BASE_DIR}" -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} + 2>/dev/null || true
     fi
 
+    # Create fresh dump directory for this run
     mkdir -p "${DUMP_DIR}"
     
     # Create timestamp file
