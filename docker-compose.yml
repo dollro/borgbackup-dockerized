@@ -6,7 +6,6 @@ services:
     image: borgbackup
     stdin_open: true
     tty: true
-    privileged: true
     environment:
       # Storage Backend Selection
       # Options: "s3" | "usb" | "local"
@@ -47,5 +46,3 @@ services:
       - ${LOCAL_BACKUP_PATH:-/tmp/backup}:/mnt/backup
     cap_add:
       - SYS_ADMIN
-    security_opt:
-      - apparmor:unconfined
