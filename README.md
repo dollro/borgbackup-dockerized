@@ -117,11 +117,12 @@ sudo docker compose run --rm borgbackup borg init --encryption=repokey
 | `LOGGING` | Logging verbosity: `INFO` or `DEBUG` | `INFO` | No |
 | `SHOW_PROGRESS` | Show real-time progress during backup: `true` or `false` | `false` | No |
 | `BORG_AUTO_BREAK_LOCK` | Handle stale locks: `false`, `manual`, or `auto` | `false` | No |
+| `BORG_TIMEOUT` | Timeout in seconds for borg create/prune operations | `14400` (4h) | No |
 | **S3 Backend** |
 | `S3_BUCKET_NAME` | Name of S3 bucket | - | Yes (S3) |
 | `AWS_ACCESS_KEY_ID` | AWS access key | - | Yes (S3) |
 | `AWS_SECRET_ACCESS_KEY` | AWS secret key | - | Yes (S3) |
-| `AWS_DEFAULT_REGION` | AWS region | `us-east-1` | No |
+| `AWS_DEFAULT_REGION` | AWS region | - | Yes (S3) |
 | **USB Backend** |
 | `USB_DEVICE_UUID` | UUID of USB device | - | Yes (USB) |
 | **Local Backend** |
@@ -376,6 +377,14 @@ sudo crontab -e
 
 For unattended cron backups, set `BORG_AUTO_BREAK_LOCK=auto` to handle stale locks automatically.
 
+> **Concurrent execution protection:** `run-backup.sh` uses `flock` to prevent overlapping runs. If a backup is still in progress when cron triggers the next one, it will exit with an error instead of corrupting the repository.
+
+To suppress color codes in cron log output, set `NO_COLOR=1`:
+
+```bash
+0 2 * * * cd /path/to/borgbackup && NO_COLOR=1 ./run-backup.sh >> /var/log/borgbackup-cron.log 2>&1
+```
+
 ### Multiple Storage Backends
 
 You can maintain multiple `.env` files for different backends:
@@ -456,9 +465,17 @@ exit
 ### Credential Management
 
 - Never commit `.env` to version control
+- Restrict `.env` file permissions: `chmod 600 .env`
 - Use strong, unique `BORG_PASSPHRASE` (store securely)
 - Rotate AWS access keys regularly
 - For USB: Consider filesystem encryption (LUKS)
+
+### Container Hardening
+
+- The container runs with only `SYS_ADMIN` capability (required for FUSE mounts)
+- Device access is restricted to `/dev/fuse` and `/dev/disk` (read-only)
+- Memory is capped at 4GB by default (adjustable in `docker-compose.yml`)
+- A health check monitors `/mnt/backup` accessibility
 
 ### Borg Encryption
 
@@ -482,15 +499,18 @@ exit
 
 The container requires the following capabilities for proper operation:
 - `SYS_ADMIN`: Required for FUSE mounts (S3, USB)
-- Access to `/dev` for USB device detection
+- Access to `/dev/fuse` for FUSE mounts and `/dev/disk` (read-only) for USB device detection by UUID
+
+> **Note:** For USB backend, you may also need to mount your specific block device (e.g., `/dev/sdb1:/dev/sdb1`) in `docker-compose.yml`.
 
 ### Volume Mounts
 
 | Container Path | Purpose |
 |---------------|---------|
 | `/mnt/backup` | Backup storage mount point |
-| `/mnt/target` | Host filesystem (read-only recommended) |
-| `/dev` | Device access for USB detection |
+| `/mnt/target` | Host filesystem |
+| `/dev/fuse` | FUSE device (required for s3fs) |
+| `/dev/disk` | Disk device info (read-only, for blkid UUID lookups) |
 
 ### Supported USB Filesystems
 
