@@ -22,16 +22,16 @@ services:
       - BORG_PASSPHRASE=${BORG_PASSPHRASE}
       
       # === S3 Configuration (when BACKUP_STORAGE_TYPE=s3) ===
-      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-}
       
       # === USB Configuration (when BACKUP_STORAGE_TYPE=usb) ===
-      - USB_DEVICE_UUID=${USB_DEVICE_UUID}
+      - USB_DEVICE_UUID=${USB_DEVICE_UUID:-}
       
       # === Local Configuration (when BACKUP_STORAGE_TYPE=local) ===
-      - LOCAL_BACKUP_PATH=${LOCAL_BACKUP_PATH}
+      - LOCAL_BACKUP_PATH=${LOCAL_BACKUP_PATH:-}
     volumes:
       # Host filesystem access for backup source
       - /:/mnt/target
