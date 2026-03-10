@@ -41,6 +41,13 @@ if [ ! -f ".env" ]; then
     exit 1
 fi
 
+# Verify Docker daemon is running
+if ! docker info >/dev/null 2>&1; then
+    echo -e "${RED}Error: Docker daemon is not running${NC}"
+    echo "Start Docker with: sudo systemctl start docker"
+    exit 1
+fi
+
 # Verify sudo access (needed for docker compose run)
 if ! sudo -n true 2>/dev/null; then
     echo -e "${RED}Error: Passwordless sudo required but not available${NC}"
