@@ -158,13 +158,17 @@ verify_storage_backend() {
     rm -f /mnt/backup/.backup_test
 
     # Check available disk space (warn if less than 5GB available)
-    local available_space=$(df -BG /mnt/backup | tail -1 | awk '{print $4}' | sed 's/G//')
-    info "Available space on backup storage: ${available_space}GB"
+    local available_space
+    available_space=$(df -BG /mnt/backup 2>/dev/null | tail -1 | awk '{print $4}' | sed 's/G//')
 
-    if [ "$available_space" -lt 5 ]; then
-        error "WARNING: Less than 5GB available on backup storage!"
-        error "Available: ${available_space}GB - Consider freeing up space or pruning old backups"
-        # Don't exit, just warn - let user decide if they want to continue
+    if [ -z "${available_space}" ] || ! [[ "${available_space}" =~ ^[0-9]+$ ]]; then
+        info "Could not determine available space on backup storage (common with s3fs)"
+    else
+        info "Available space on backup storage: ${available_space}GB"
+        if [ "${available_space}" -lt 5 ]; then
+            error "WARNING: Less than 5GB available on backup storage!"
+            error "Available: ${available_space}GB - Consider freeing up space or pruning old backups"
+        fi
     fi
 
     success "Storage backend '${BACKUP_STORAGE_TYPE}' is accessible"
