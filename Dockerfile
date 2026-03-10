@@ -24,4 +24,8 @@ COPY ./backup.sh /usr/sbin/backup.sh
 RUN chmod +x /usr/sbin/backup.sh \
     && mkdir -p /var/log/borgbackup
 
+# Health check: verify backup mount is accessible (only meaningful during backup runs)
+HEALTHCHECK --interval=60s --timeout=5s --start-period=30s --retries=3 \
+    CMD test -d /mnt/backup || exit 1
+
 ENTRYPOINT ["/entrypoint"]
