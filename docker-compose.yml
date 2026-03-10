@@ -47,6 +47,11 @@ services:
       - ${LOCAL_BACKUP_PATH:-/mnt/backup-unused}:/mnt/backup
     cap_add:
       - SYS_ADMIN
+    device_cgroup_rules:
+      # Allow access to SCSI/SATA block devices (major 8) for USB mounting
+      - 'b 8:* rmw'
+      # Allow access to FUSE device (major 10, minor 229) for s3fs
+      - 'c 10:229 rmw'
     deploy:
       resources:
         limits:
