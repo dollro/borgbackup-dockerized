@@ -12,6 +12,7 @@ set -o pipefail
 BACKUP_STORAGE_TYPE="${BACKUP_STORAGE_TYPE:-s3}"
 SHOW_PROGRESS="${SHOW_PROGRESS:-false}"
 BORG_AUTO_BREAK_LOCK="${BORG_AUTO_BREAK_LOCK:-false}"
+BORG_TIMEOUT="${BORG_TIMEOUT:-14400}"  # 4 hours default
 LOG_DIR="/mnt/target/backup/log"
 LOG_FILE="${LOG_DIR}/backup-$(date +%Y%m%d-%H%M%S).log"
 DUMP_BASE_DIR="/mnt/target/backup/dump"
@@ -347,7 +348,7 @@ main() {
         fi
         
         set +e
-        borg create \
+        timeout "${BORG_TIMEOUT}" borg create \
             --verbose \
             ${PROGRESS_OPT} \
             --stats \
@@ -408,7 +409,7 @@ main() {
         fi
         
         set +e
-        borg prune \
+        timeout "${BORG_TIMEOUT}" borg prune \
             ${PROGRESS_OPT} \
             --list \
             --glob-archives '{hostname}-*' \
