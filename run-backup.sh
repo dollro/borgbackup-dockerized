@@ -57,6 +57,9 @@ if ! docker info >/dev/null 2>&1; then
     exit 1
 fi
 
+# Ensure writable directories exist on host (mounted into container for logs/dumps)
+mkdir -p /backup/log /backup/dump 2>/dev/null || sudo mkdir -p /backup/log /backup/dump
+
 # Rebuild the image if needed (in case backup.sh was updated)
 echo -e "${YELLOW}Building/updating Docker image...${NC}"
 if ! docker compose build --quiet; then
