@@ -94,7 +94,14 @@ perform_dumps() {
 
     # Clean up leftover dump dirs from previous failed runs
     if [ -d "${DUMP_BASE_DIR}" ]; then
-        find "${DUMP_BASE_DIR}" -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} + 2>/dev/null || true
+        local stale_dirs
+        stale_dirs=$(find "${DUMP_BASE_DIR}" -mindepth 1 -maxdepth 1 -type d 2>/dev/null)
+        if [ -n "${stale_dirs}" ]; then
+            error "WARNING: Found stale dump directories from previous failed runs:"
+            echo "${stale_dirs}" | while read -r d; do error "  $(basename "$d")"; done
+            info "Cleaning up stale dump directories..."
+            echo "${stale_dirs}" | xargs rm -rf 2>/dev/null || true
+        fi
     fi
 
     # Create fresh dump directory for this run
