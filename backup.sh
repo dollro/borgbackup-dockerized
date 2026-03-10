@@ -346,6 +346,7 @@ main() {
             info "Retrying backup after lock resolution..."
         fi
         
+        set +e
         borg create \
             --verbose \
             ${PROGRESS_OPT} \
@@ -370,8 +371,8 @@ main() {
             "${LOCAL_PATH_EXCLUDE[@]}" \
             ::'{hostname}-{now}' \
             . 2>&1 | tee -a "${LOG_FILE}"
-        
         backup_exit=${PIPESTATUS[0]}
+        set -e
         backup_attempts=$((backup_attempts + 1))
         
         # If lock error and not on last attempt, try to handle it
@@ -406,6 +407,7 @@ main() {
             info "Retrying prune after lock resolution..."
         fi
         
+        set +e
         borg prune \
             ${PROGRESS_OPT} \
             --list \
@@ -414,8 +416,8 @@ main() {
             --keep-daily 7 \
             --keep-weekly 4 \
             --keep-monthly 6 2>&1 | tee -a "${LOG_FILE}"
-        
         prune_exit=${PIPESTATUS[0]}
+        set -e
         prune_attempts=$((prune_attempts + 1))
         
         # If lock error and not on last attempt, try to handle it
