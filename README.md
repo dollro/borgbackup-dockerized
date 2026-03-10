@@ -472,8 +472,7 @@ exit
 
 ### Container Hardening
 
-- The container runs with only `SYS_ADMIN` capability (required for FUSE mounts)
-- Device access via `/dev` (required for FUSE and USB block device mounting)
+- The container runs in privileged mode (required for FUSE mounts and mounting over bind mounts)
 - Memory is capped at 4GB by default (adjustable in `docker-compose.yml`)
 - A health check monitors `/mnt/backup` accessibility
 
@@ -498,8 +497,8 @@ exit
 ### Container Capabilities
 
 The container requires the following capabilities for proper operation:
-- `SYS_ADMIN`: Required for FUSE mounts (S3) and block device mounts (USB)
-- Access to `/dev` for FUSE device and USB block device detection/mounting
+- `privileged`: Required for FUSE mounts (S3), block device mounts (USB), and mounting over Docker bind mounts
+- `SYS_ADMIN`: Required for FUSE mounts (S3, USB)
 
 ### Volume Mounts
 

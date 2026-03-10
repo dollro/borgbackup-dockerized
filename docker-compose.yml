@@ -44,14 +44,10 @@ services:
       # Local backup destination (bind mount from host)
       # For BACKUP_STORAGE_TYPE=local: set LOCAL_BACKUP_PATH in .env (required)
       # For S3/USB: this mount is overwritten by FUSE/device mount in entrypoint
-      - ${LOCAL_BACKUP_PATH:-/mnt/backup-unused}:/mnt/backup
+      - ${LOCAL_BACKUP_PATH:-/tmp/backup}:/mnt/backup
+    privileged: true
     cap_add:
       - SYS_ADMIN
-    device_cgroup_rules:
-      # Allow access to SCSI/SATA block devices (major 8) for USB mounting
-      - 'b 8:* rmw'
-      # Allow access to FUSE device (major 10, minor 229) for s3fs
-      - 'c 10:229 rmw'
     deploy:
       resources:
         limits:
