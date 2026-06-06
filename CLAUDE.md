@@ -7,17 +7,27 @@ Dockerized BorgBackup solution with multiple storage backends: AWS S3, USB devic
 ## Architecture
 
 - `/mnt/backup`: Backup storage mount point (S3 bucket, USB device, or local path)
-- `/mnt/target`: Host's root filesystem (backup source)
+- `/mnt/target`: Host's root filesystem, mounted read-only (backup source)
+
+**Execution chain** (the work is split across three files):
+
+```
+run-backup.sh   [host]      flock, build image, `docker compose run` the container
+  └─ entrypoint [container]  mount storage at /mnt/backup, exec the command, unmount on exit
+       └─ backup.sh [container]  borg create → borg prune
+```
 
 ## Key Files
 
 | File | Purpose |
-|------|---------|
-| `run-backup.sh` | Main backup wrapper script |
-| `docker-compose.yml` | Container orchestration |
-| `.env` | Configuration (copy from `.env.example`) |
+|-|-|
+| `run-backup.sh` | Host launcher (what you/cron call): flock, builds image, runs the container |
+| `entrypoint` | Container ENTRYPOINT: mounts/unmounts storage, then `exec`s the given command |
+| `backup.sh` | Borg logic (`create` + `prune`); baked into image at `/usr/sbin/backup.sh` |
+| `docker-compose.yml` | Container orchestration (`environment:` block must list any var the scripts read) |
 | `Dockerfile` | Container image definition |
-| `backup.sh` | Internal backup script (in container at `/usr/sbin/backup.sh`) |
+| `.env` | Configuration (copy from `.env.example`) |
+| `mkdocs.yml`, `Taskfile.yml` | Docs site config + tasks (`task docs-serve` to preview) |
 
 ## Common Commands
 
@@ -59,6 +69,9 @@ sudo docker compose --env-file .env.s3 run --rm borgbackup borg list
 - `LOGGING`: `INFO` or `DEBUG`
 - `SHOW_PROGRESS`: `true` or `false`
 - `BORG_AUTO_BREAK_LOCK`: `false`, `manual`, or `auto`
+- `BORG_TIMEOUT`: seconds for borg create/prune (default: `14400` = 4h)
+
+**Gotcha:** a variable only reaches the container if it's listed in `docker-compose.yml`'s `environment:` block (there is no `env_file:`). Setting a var in `.env` alone is silently ignored.
 
 ## Tech Stack
 
@@ -68,5 +81,10 @@ sudo docker compose --env-file .env.s3 run --rm borgbackup borg list
 
 ## Container Requirements
 
-- `SYS_ADMIN` capability (for FUSE mounts)
-- Access to `/dev` (for USB detection)
+- `privileged: true` (FUSE/S3 mounts, USB block devices, mounting over Docker bind mounts)
+- `SYS_ADMIN` capability (FUSE mounts)
+- Access to `/dev` (USB block devices, FUSE)
+
+## Documentation
+
+Full docs are a MkDocs (Material) site under `docs/`, split from the README. Preview with `task docs-serve` (http://127.0.0.1:8888) or build with `task docs` (strict). Implementation plans live in `plans/`; design specs in `docs/superpowers/specs/`.
