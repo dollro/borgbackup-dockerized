@@ -20,7 +20,11 @@ services:
       # Borg Configuration
       - BORG_REPO_PATH=${BORG_REPO_PATH:-borgbackup}
       - BORG_PASSPHRASE=${BORG_PASSPHRASE}
-      
+      # Stale lock handling: "false" | "manual" | "auto"
+      - BORG_AUTO_BREAK_LOCK=${BORG_AUTO_BREAK_LOCK:-false}
+      # Timeout (seconds) for borg create/prune operations
+      - BORG_TIMEOUT=${BORG_TIMEOUT:-14400}
+
       # === S3 Configuration (when BACKUP_STORAGE_TYPE=s3) ===
       - S3_BUCKET_NAME=${S3_BUCKET_NAME:-}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
