@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-06-06-docs-plans-reorganization-design.md`
 
-**Deviation from approved spec:** The spec listed 11 docs pages and said to fold mined Cline content into `reference.md`. This plan adds a 12th page, `docs/architecture.md`, because `memory-bank/systemPatterns.md` contains ~387 lines of architecture/design-pattern material that would overwhelm `reference.md`. Reviewer may drop Task 13 and fold the content into `reference.md` instead.
+**Source-of-truth decision:** `README.md` is the trusted, human-maintained documentation and the actual scripts are ground truth. `memory-bank/` is an unverified secondary source that has already drifted from the code (e.g. it places the `log_*` functions in `backup.sh`, but they live in `entrypoint:23-37`). It is therefore **not** mined into the docs — the site is a faithful 1:1 split of the current README, and `memory-bank/`+`.clinerules/` are retired as-is. (This supersedes the spec's "fold mined Cline content into the docs" step.)
 
 ---
 
@@ -20,7 +20,7 @@ Created:
 - `mkdocs.yml` — site config, Material theme, nav
 - `requirements-docs.txt` — pins `mkdocs-material`
 - `Taskfile.yml` — `docs` (build) and `docs-serve` tasks
-- `docs/index.md` — overview / key features / architecture summary + links
+- `docs/index.md` — overview / key features / architecture summary (from README) + links
 - `docs/getting-started.md` — requirements + quick start
 - `docs/configuration.md` — environment variables
 - `docs/backends.md` — S3 / USB / Local setup
@@ -31,14 +31,13 @@ Created:
 - `docs/troubleshooting.md` — debug, common issues
 - `docs/security.md` — credentials, hardening, encryption
 - `docs/reference.md` — versions, capabilities, mounts, filesystems, resources
-- `docs/architecture.md` — design patterns, script chain, exit codes (mined from Cline)
 
 Modified:
 - `README.md` — slimmed to executive summary + doc links
 - `.gitignore` — adopt sidesupport pattern
 
 Removed:
-- `memory-bank/` (6 files), `.clinerules/` (after mining)
+- `memory-bank/` (6 files), `.clinerules/` — retired as-is (untrusted/stale; superseded by README + code)
 
 Conventions for every page move:
 - The README uses `##`/`###`/`####`. As a standalone page each becomes one level shallower: `## X` → `# X` (page H1), `### Y` → `## Y`, `#### Z` → `### Z`.
@@ -96,7 +95,6 @@ nav:
     - Scheduling: scheduling.md
   - Reference:
     - Features: features.md
-    - Architecture: architecture.md
     - Troubleshooting: troubleshooting.md
     - Security: security.md
     - Technical Reference: reference.md
@@ -143,7 +141,7 @@ Expected: mkdocs-material and mkdocs install successfully. (If `pip` is external
 - [ ] **Step 6: Verify the skeleton builds**
 
 Run: `mkdocs build --strict 2>&1 | head -40`
-Expected: FAIL — strict mode reports the nav references pages that don't exist yet (`getting-started.md`, etc.). This confirms strict validation is active. Pages get created in Tasks 2–13.
+Expected: FAIL — strict mode reports the nav references pages that don't exist yet (`getting-started.md`, etc.). This confirms strict validation is active. Pages get created in Tasks 2–12.
 
 - [ ] **Step 7: Commit**
 
@@ -201,7 +199,6 @@ This allows Borg to read files from your host system and store encrypted backups
 - [Scheduling](scheduling.md) — cron and multiple backends
 - [Troubleshooting](troubleshooting.md)
 - [Security Considerations](security.md)
-- [Architecture](architecture.md) — internal design and script flow
 - [Technical Reference](reference.md)
 ```
 
@@ -560,48 +557,7 @@ git commit -m "docs: add technical reference page"
 
 ---
 
-## Task 13: Architecture page (`docs/architecture.md`) — mined from Cline
-
-**Source:** `memory-bank/systemPatterns.md` (design patterns, script dependency chain, exit-code meanings, container filesystem layout) and the backend technical details / default exclusions from `memory-bank/techContext.md` not already covered by `backends.md` or `reference.md`.
-
-> Reviewer: if you rejected the architecture-page deviation, skip this task and instead append the same mined content as `## Architecture` sections inside `reference.md` (Task 12), and remove the `architecture.md` line from `mkdocs.yml` nav in Task 1.
-
-**Files:**
-- Create: `docs/architecture.md`
-- Read: `memory-bank/systemPatterns.md`, `memory-bank/techContext.md`
-
-- [ ] **Step 1: Read both source files**
-
-Run: `sed -n '120,360p' memory-bank/systemPatterns.md` and `sed -n '246,275p' memory-bank/techContext.md`
-Purpose: identify the Design Patterns, Script Dependency Chain, Exit Code Meanings, Container Filesystem Layout, and Default Exclusions content to carry over.
-
-- [ ] **Step 2: Write `docs/architecture.md`**
-
-Compose a page with H1 `# Architecture` and these `##` sections, transcribing the corresponding content from the Cline files (drop any content already duplicated verbatim in `backends.md`/`reference.md`):
-
-- `## Design Patterns` — the seven patterns (Storage Backend, Entrypoint, Environment-Based Configuration, Interactive vs Non-Interactive Detection, Modular Dump System, Graceful Cleanup, Debug/Production Logging) from `systemPatterns.md` lines 120–224.
-- `## Script Dependency Chain` — from `systemPatterns.md` lines 93–119.
-- `## Container Filesystem Layout` — from `systemPatterns.md` lines 296–322.
-- `## Exit Codes` — the exit-code meanings table/list from `systemPatterns.md` lines 334–349.
-- `## Default Backup Exclusions` — from `techContext.md` lines 248–264.
-
-Preserve fenced code blocks and tables exactly; only adjust heading levels to fit under the page H1.
-
-- [ ] **Step 3: Verify the page is non-trivial and well-formed**
-
-Run: `grep -c '^## ' docs/architecture.md`
-Expected: 5.
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add docs/architecture.md
-git commit -m "docs: add architecture page (mined from memory-bank)"
-```
-
----
-
-## Task 14: Strict build — verify the whole site
+## Task 13: Strict build — verify the whole site
 
 **Files:** none (verification only)
 
@@ -624,7 +580,7 @@ Expected: `OK`
 
 ---
 
-## Task 15: Slim the README
+## Task 14: Slim the README
 
 **Files:**
 - Modify: `README.md` (full replacement)
@@ -676,7 +632,6 @@ task docs-serve   # http://127.0.0.1:8888   (or: mkdocs serve)
 | Cron & multiple backends | [Scheduling](docs/scheduling.md) |
 | Common issues | [Troubleshooting](docs/troubleshooting.md) |
 | Credentials & hardening | [Security](docs/security.md) |
-| Internal design | [Architecture](docs/architecture.md) |
 | Versions, capabilities, mounts | [Technical Reference](docs/reference.md) |
 
 ## License
@@ -698,15 +653,15 @@ git commit -m "docs: slim README to executive summary linking docs site"
 
 ---
 
-## Task 16: Retire Cline artifacts
+## Task 15: Retire Cline artifacts
 
 **Files:**
 - Remove: `memory-bank/` (6 files), `.clinerules/`
 
-- [ ] **Step 1: Confirm nothing un-mined remains**
+- [ ] **Step 1: Confirm what is being removed**
 
 Run: `ls memory-bank/ .clinerules/`
-Sanity check that the only files are the six `memory-bank/*.md` and `.clinerules/default-rules.md`. Architecture-relevant content was carried into `docs/architecture.md` in Task 13; `.clinerules/default-rules.md` is Cline tool config with no docs value.
+Expected: the six `memory-bank/*.md` and `.clinerules/default-rules.md`. These are an unverified secondary source that has drifted from the code (see the source-of-truth decision in the header); the README + scripts supersede them, so they are removed without mining.
 
 - [ ] **Step 2: Remove the directories**
 
@@ -724,12 +679,12 @@ Expected: "No such file or directory" for both.
 - [ ] **Step 4: Commit**
 
 ```bash
-git commit -m "chore: retire Cline memory-bank and clinerules (content moved to docs)"
+git commit -m "chore: retire stale Cline memory-bank and clinerules (superseded by README + code)"
 ```
 
 ---
 
-## Task 17: Update `.gitignore` and track plans
+## Task 16: Update `.gitignore` and track plans
 
 **Files:**
 - Modify: `.gitignore`
@@ -772,7 +727,7 @@ git commit -m "chore: adopt sidesupport .gitignore pattern and track plans"
 
 ---
 
-## Task 18: Final verification
+## Task 17: Final verification
 
 **Files:** none
 
@@ -793,7 +748,7 @@ Expected: "nothing to commit, working tree clean" (only ignored files like `docs
 
 - [ ] **Step 4: Review the commit sequence**
 
-Run: `git log --oneline -18`
+Run: `git log --oneline -17`
 Expected: the scaffold → per-page → strict-build → README → Cline → gitignore commits in order.
 
 ---
@@ -801,17 +756,17 @@ Expected: the scaffold → per-page → strict-build → README → Cline → gi
 ## Self-Review
 
 **Spec coverage:**
-- Full MkDocs Material site → Task 1 (`mkdocs.yml`), Tasks 2–13 (pages). ✓
-- README split, slim executive README → Tasks 2–12 (split), Task 15 (slim). ✓
-- Retire `memory-bank/` + `.clinerules/`, fold useful content into docs → Task 13 (mine), Task 16 (remove). ✓
+- Full MkDocs Material site → Task 1 (`mkdocs.yml`), Tasks 2–12 (11 pages). ✓
+- README split, slim executive README → Tasks 2–12 (split), Task 14 (slim). ✓
+- Retire `memory-bank/` + `.clinerules/` (without mining — stale source) → Task 15. ✓
 - Taskfile (go-task), config-only, no CI → Task 1 (`Taskfile.yml`, `requirements-docs.txt`). ✓
-- `.gitignore` sidesupport pattern + track `plans/` → Task 17. ✓
-- Keep existing `plans/` convention → untouched; tracked in Task 17. ✓
-- Commit sequence (scaffold → README split → retire Cline → gitignore) → matches Tasks 1–17. ✓
+- `.gitignore` sidesupport pattern + track `plans/` → Task 16. ✓
+- Keep existing `plans/` convention → untouched; tracked in Task 16. ✓
+- Commit sequence (scaffold → README split → retire Cline → gitignore) → matches Tasks 1–16. ✓
 
-**Deviation flagged:** `docs/architecture.md` (Task 13) is beyond the spec's 11 pages; reviewer opt-out documented in Task 13 and Task 1 nav.
+**Source-of-truth note:** README is migrated 1:1 into 11 docs pages; `memory-bank/` is not mined (it has drifted from the code), so no architecture page is created. This matches the header's source-of-truth decision and keeps the spec's 11-page structure.
 
-**Placeholder scan:** Content moves use exact `README.md` line ranges with explicit heading-promotion and link-rewrite instructions; config files and the home/getting-started/configuration/reference/README pages are shown in full. The two pages transcribed from large sources (`backends.md`, `architecture.md`) reference exact source line ranges plus verification greps rather than reproducing hundreds of duplicated lines — concrete, not vague.
+**Placeholder scan:** Content moves use exact `README.md` line ranges with explicit heading-promotion and link-rewrite instructions; config files and the home/getting-started/configuration/reference/README pages are shown in full. The one page transcribed from a large source (`backends.md`) references exact source line ranges plus a verification grep rather than reproducing hundreds of duplicated lines — concrete, not vague.
 
-**Consistency check:** Anchor `#automatic-lock-handling` is produced by `## Automatic Lock Handling` in `features.md` (Task 8) and consumed as `features.md#automatic-lock-handling` in `troubleshooting.md` (Task 10). Page filenames match `mkdocs.yml` nav (Task 1) one-to-one. `task docs-serve`/`task docs` names match the README instructions (Task 15).
+**Consistency check:** Anchor `#automatic-lock-handling` is produced by `## Automatic Lock Handling` in `features.md` (Task 8) and consumed as `features.md#automatic-lock-handling` in `troubleshooting.md` (Task 10). Page filenames match `mkdocs.yml` nav (Task 1) one-to-one. `task docs-serve`/`task docs` names match the README instructions (Task 14).
 ```
