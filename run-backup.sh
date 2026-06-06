@@ -41,6 +41,15 @@ if [ ! -f ".env" ]; then
     exit 1
 fi
 
+# Default borg's archive prefix to this host's hostname.
+# backup.sh names archives '{hostname}-{now}' and prunes '--glob-archives {hostname}-*',
+# so the container's hostname must be stable and match an existing repo's lineage.
+# Compose can't read the host hostname itself, so set it here. An existing
+# BORG_HOSTNAME (from the environment or .env) takes precedence.
+if [ -z "${BORG_HOSTNAME:-}" ] && ! grep -qE '^[[:space:]]*BORG_HOSTNAME=' .env; then
+    export BORG_HOSTNAME="$(hostname)"
+fi
+
 # Prevent concurrent execution (protects borg repo from corruption)
 LOCK_FILE="/tmp/borgbackup.lock"
 exec 200>"$LOCK_FILE"
@@ -57,8 +66,10 @@ if ! docker info >/dev/null 2>&1; then
     exit 1
 fi
 
-# Ensure writable directories exist on host (mounted into container for logs/dumps)
-mkdir -p /backup/log /backup/dump 2>/dev/null || sudo mkdir -p /backup/log /backup/dump
+# Ensure writable directories exist on host (mounted into container for logs/dumps
+# and for borg's persisted cache + security/config dir)
+mkdir -p /backup/log /backup/dump /var/cache/borgbackup /var/lib/borgbackup 2>/dev/null \
+    || sudo mkdir -p /backup/log /backup/dump /var/cache/borgbackup /var/lib/borgbackup
 
 # Rebuild the image if needed (in case backup.sh was updated)
 echo -e "${YELLOW}Building/updating Docker image...${NC}"

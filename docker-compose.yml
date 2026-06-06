@@ -4,6 +4,11 @@ services:
       context: .
       dockerfile: ./Dockerfile
     image: borgbackup
+    # Container hostname drives borg's {hostname} placeholder in archive names
+    # ('{hostname}-{now}') and prune ('--glob-archives {hostname}-*'). It must be
+    # stable across runs (the Docker default is a random container ID). run-backup.sh
+    # defaults BORG_HOSTNAME to the host's hostname; set BORG_HOSTNAME in .env to override.
+    hostname: ${BORG_HOSTNAME:-borgbackup}
     stdin_open: true
     tty: true
     environment:
@@ -42,7 +47,13 @@ services:
       # Writable paths for backup logs and pre-backup dumps
       - /backup/log:/mnt/target/backup/log
       - /backup/dump:/mnt/target/backup/dump
-      
+
+      # Persist borg's cache and security/config dir across `--rm` runs (host dirs).
+      # Without this, every run rebuilds the chunks cache from the repo (slow + S3
+      # GET costs); persisting it restores fast incremental syncs.
+      - /var/cache/borgbackup:/root/.cache/borg
+      - /var/lib/borgbackup:/root/.config/borg
+
       # Device access for FUSE mounts (S3) and block devices (USB)
       - /dev:/dev
       - /etc/passwd:/etc/passwd:ro
