@@ -74,10 +74,12 @@ echo -e "${GREEN}Running backup script...${NC}"
 # Keep the TTY for interactive runs so prompts (e.g. BORG_AUTO_BREAK_LOCK=manual) work.
 TTY_FLAG=""
 [ -t 1 ] || TTY_FLAG="-T"
-sudo docker compose run --rm $TTY_FLAG borgbackup /usr/sbin/backup.sh
 
-# Get exit code
-EXIT_CODE=$?
+# Capture the exit code without tripping `set -e`. The `|| EXIT_CODE=$?` keeps the
+# script alive on a non-zero return so the status branches below can report it.
+# This matters for borg's exit code 1 (warnings), which is non-fatal.
+EXIT_CODE=0
+sudo docker compose run --rm $TTY_FLAG borgbackup /usr/sbin/backup.sh || EXIT_CODE=$?
 
 if [ $EXIT_CODE -eq 0 ]; then
     echo -e "${GREEN}================================================${NC}"
