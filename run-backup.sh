@@ -69,7 +69,12 @@ fi
 
 # Run the backup
 echo -e "${GREEN}Running backup script...${NC}"
-sudo docker compose run --rm borgbackup /usr/sbin/backup.sh
+# Disable pseudo-TTY allocation when not attached to a terminal (e.g. cron),
+# otherwise `docker compose run` fails with "the input device is not a TTY".
+# Keep the TTY for interactive runs so prompts (e.g. BORG_AUTO_BREAK_LOCK=manual) work.
+TTY_FLAG=""
+[ -t 1 ] || TTY_FLAG="-T"
+sudo docker compose run --rm $TTY_FLAG borgbackup /usr/sbin/backup.sh
 
 # Get exit code
 EXIT_CODE=$?
