@@ -1,0 +1,44 @@
+site_name: Dockerized BorgBackup
+site_description: Containerized BorgBackup with S3, USB, and local storage backends
+docs_dir: docs
+site_dir: docs-site
+dev_addr: 127.0.0.1:8888
+
+validation:
+  links:
+    absolute_links: relative_to_docs
+    anchors: warn
+    unrecognized_links: warn
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.expand
+    - content.code.copy
+  palette:
+    scheme: default
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Configuration:
+    - Environment Variables: configuration.md
+    - Storage Backends: backends.md
+  - Usage:
+    - Running Backups: usage.md
+    - Restoring from Backup: restore.md
+    - Scheduling: scheduling.md
+  - Reference:
+    - Features: features.md
+    - Troubleshooting: troubleshooting.md
+    - Security: security.md
+    - Technical Reference: reference.md
+
+markdown_extensions:
+  - toc:
+      permalink: true
+  - tables
+  - attr_list
+  - pymdownx.highlight
+  - pymdownx.superfences

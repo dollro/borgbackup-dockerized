@@ -1,0 +1,12 @@
+version: '3'
+
+tasks:
+  docs:
+    desc: Build static docs site into docs-site/
+    cmds:
+      - mkdocs build
+
+  docs-serve:
+    desc: Serve docs locally at http://127.0.0.1:8888
+    cmds:
+      - mkdocs serve
