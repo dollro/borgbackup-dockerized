@@ -1,1 +1,12 @@
+# Secrets
 .env
+
+# Claude Code — track shared settings, ignore local overrides
+.claude/*
+!.claude/settings.json
+
+# MkDocs build output
+docs-site/
+
+# Vim swap files
+[._]*.sw[a-p]
