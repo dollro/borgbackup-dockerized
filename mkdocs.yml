@@ -3,6 +3,8 @@ site_description: Containerized BorgBackup with S3, USB, and local storage backe
 docs_dir: docs
 site_dir: docs-site
 dev_addr: 127.0.0.1:8888
+exclude_docs: |
+  superpowers/
 
 validation:
   links:
