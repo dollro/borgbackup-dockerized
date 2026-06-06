@@ -4,7 +4,7 @@ tasks:
   docs:
     desc: Build static docs site into docs-site/
     cmds:
-      - mkdocs build
+      - mkdocs build --strict
 
   docs-serve:
     desc: Serve docs locally at http://127.0.0.1:8888

@@ -57,3 +57,5 @@ sudo docker compose run --rm borgbackup borg check
 sudo docker compose run --rm borgbackup \
     borg prune --keep-daily=7 --keep-weekly=4 --keep-monthly=6
 ```
+
+See [Restoring from Backup](restore.md) for full extraction options.
