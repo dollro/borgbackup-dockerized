@@ -29,6 +29,7 @@ This allows Borg to read files from your host system and store encrypted backups
 - [Storage Backends](backends.md) — S3, USB, and local setup
 - [Usage](usage.md) — running backups and common commands
 - [Restoring from Backup](restore.md) — single-file, full, FUSE, and bare-metal restores
+- [Deploying on a VPS](deployment.md) — set up and verify a first backup on a real server
 - [Features](features.md) — lock handling, progress, dumps, retention
 - [Scheduling](scheduling.md) — cron and multiple backends
 - [Troubleshooting](troubleshooting.md)

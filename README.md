@@ -38,6 +38,7 @@ task docs-serve   # http://127.0.0.1:8888   (or: mkdocs serve)
 | S3 / USB / Local setup | [Storage Backends](docs/backends.md) |
 | Running backups & borg commands | [Usage](docs/usage.md) |
 | Restoring (file, full, FUSE, bare-metal) | [Restore](docs/restore.md) |
+| Deploying & verifying on a VPS | [Deployment](docs/deployment.md) |
 | Lock handling, progress, dumps, retention | [Features](docs/features.md) |
 | Cron & multiple backends | [Scheduling](docs/scheduling.md) |
 | Common issues | [Troubleshooting](docs/troubleshooting.md) |

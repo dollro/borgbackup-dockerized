@@ -30,6 +30,7 @@ nav:
   - Usage:
     - Running Backups: usage.md
     - Restoring from Backup: restore.md
+    - Deploying on a VPS: deployment.md
     - Scheduling: scheduling.md
   - Reference:
     - Features: features.md
