@@ -12,7 +12,9 @@ set -o pipefail
 BACKUP_STORAGE_TYPE="${BACKUP_STORAGE_TYPE:-s3}"
 SHOW_PROGRESS="${SHOW_PROGRESS:-false}"
 BORG_AUTO_BREAK_LOCK="${BORG_AUTO_BREAK_LOCK:-false}"
-BORG_TIMEOUT="${BORG_TIMEOUT:-14400}"  # 4 hours default
+BORG_TIMEOUT="${BORG_TIMEOUT:-14400}"  # 4 hours default (0 = no timeout)
+# Space-separated paths to back up, relative to the host root (default: whole host root)
+BORG_SOURCE_PATHS="${BORG_SOURCE_PATHS:-.}"
 LOG_DIR="/mnt/target/backup/log"
 LOG_FILE="${LOG_DIR}/backup-$(date +%Y%m%d-%H%M%S).log"
 RUN_ID="$(date +%Y%m%d-%H%M%S)-$$"
@@ -297,8 +299,7 @@ main() {
         exit 1
     fi
     if [ -z "${BORG_PASSPHRASE}" ]; then
-        error "BORG_PASSPHRASE is not set"
-        exit 1
+        info "BORG_PASSPHRASE is empty - assuming an unencrypted repo (--encryption=none)"
     fi
     if ! [[ "${BORG_TIMEOUT}" =~ ^[0-9]+$ ]]; then
         error "BORG_TIMEOUT must be numeric (seconds), got: ${BORG_TIMEOUT}"
@@ -347,6 +348,40 @@ main() {
         info "Excluding local backup path from backup: ${LOCAL_PATH_RELATIVE}"
     fi
     
+    # Build source list (paths relative to host root, leading slash stripped)
+    SOURCE_PATHS=()
+    for src in ${BORG_SOURCE_PATHS}; do
+        src="${src#/}"
+        [ -z "${src}" ] && src="."
+        if [ ! -e "${src}" ]; then
+            error "Source path does not exist on host: /${src#.}"
+            exit 2
+        fi
+        SOURCE_PATHS+=("${src}")
+    done
+    info "Source paths: ${SOURCE_PATHS[*]}"
+
+    # System excludes only make sense when backing up the whole host root.
+    # With explicit sources (e.g. mnt/data/...) the 'mnt/*' exclude would drop everything.
+    SYSTEM_EXCLUDES=()
+    if [ "${SOURCE_PATHS[*]}" = "." ]; then
+        SYSTEM_EXCLUDES=(
+            --exclude 'backup/snapshots/*'
+            --exclude 'backup/log/*'
+            --exclude 'home/*/.cache/*'
+            --exclude 'var/cache/*'
+            --exclude 'var/tmp/*'
+            --exclude 'dev/*'
+            --exclude 'proc/*'
+            --exclude 'sys/*'
+            --exclude 'tmp/*'
+            --exclude 'run/*'
+            --exclude 'mnt/*'
+            --exclude 'media/*'
+            --exclude 'lost+found'
+        )
+    fi
+
     # Attempt backup (with lock handling)
     local backup_attempts=0
     local max_attempts=2
@@ -366,22 +401,10 @@ main() {
             --exclude-caches \
             --compression lz4 \
             --one-file-system \
-            --exclude 'backup/snapshots/*' \
-            --exclude 'backup/log/*' \
-            --exclude 'home/*/.cache/*' \
-            --exclude 'var/cache/*' \
-            --exclude 'var/tmp/*' \
-            --exclude 'dev/*' \
-            --exclude 'proc/*' \
-            --exclude 'sys/*' \
-            --exclude 'tmp/*' \
-            --exclude 'run/*' \
-            --exclude 'mnt/*' \
-            --exclude 'media/*' \
-            --exclude 'lost+found' \
+            "${SYSTEM_EXCLUDES[@]}" \
             "${LOCAL_PATH_EXCLUDE[@]}" \
             ::'{hostname}-{now}' \
-            . 2>&1 | tee -a "${LOG_FILE}"
+            "${SOURCE_PATHS[@]}" 2>&1 | tee -a "${LOG_FILE}"
         backup_exit=${PIPESTATUS[0]}
         set -e
         backup_attempts=$((backup_attempts + 1))

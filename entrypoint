@@ -456,10 +456,9 @@ setup_storage_backend() {
     echo ""
 
     # Validate BORG_PASSPHRASE is set
+    # Empty passphrase is only valid for repos created with --encryption=none
     if [ -z "${BORG_PASSPHRASE}" ]; then
-        log_error "BORG_PASSPHRASE environment variable is required but not set"
-        log_error "Please set BORG_PASSPHRASE in your .env file"
-        exit 1
+        log_info "BORG_PASSPHRASE is empty - only works with an unencrypted repo (--encryption=none)"
     fi
 
     case "$BACKUP_STORAGE_TYPE" in

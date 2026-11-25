@@ -54,7 +54,7 @@ sudo docker compose --env-file .env.s3 run --rm borgbackup borg list
 ## Environment Variables
 
 **Required:**
-- `BORG_PASSPHRASE`: Encryption passphrase
+- `BORG_PASSPHRASE`: Encryption passphrase (may be empty only for `--encryption=none` repos)
 
 **Storage Selection:**
 - `BACKUP_STORAGE_TYPE`: `s3`, `usb`, or `local` (default: `s3`)
@@ -69,7 +69,9 @@ sudo docker compose --env-file .env.s3 run --rm borgbackup borg list
 - `LOGGING`: `INFO` or `DEBUG`
 - `SHOW_PROGRESS`: `true` or `false`
 - `BORG_AUTO_BREAK_LOCK`: `false`, `manual`, or `auto`
-- `BORG_TIMEOUT`: seconds for borg create/prune (default: `14400` = 4h)
+- `BORG_TIMEOUT`: seconds for borg create/prune (default: `14400` = 4h; `0` = no timeout)
+- `BORG_SOURCE_PATHS`: space-separated paths relative to host root (default: `.` = whole root with system excludes; explicit paths skip those excludes)
+- `BORG_HOSTNAME`: archive name prefix `{hostname}-{now}` (default: host's hostname; must stay stable to match an existing repo)
 
 **Gotcha:** a variable only reaches the container if it's listed in `docker-compose.yml`'s `environment:` block (there is no `env_file:`). Setting a var in `.env` alone is silently ignored.
 

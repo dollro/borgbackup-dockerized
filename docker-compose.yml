@@ -29,6 +29,8 @@ services:
       - BORG_AUTO_BREAK_LOCK=${BORG_AUTO_BREAK_LOCK:-false}
       # Timeout (seconds) for borg create/prune operations
       - BORG_TIMEOUT=${BORG_TIMEOUT:-14400}
+      # Space-separated source paths relative to host root (default "." = whole root)
+      - BORG_SOURCE_PATHS=${BORG_SOURCE_PATHS:-.}
 
       # === S3 Configuration (when BACKUP_STORAGE_TYPE=s3) ===
       - S3_BUCKET_NAME=${S3_BUCKET_NAME:-}
